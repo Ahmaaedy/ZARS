@@ -1,0 +1,37 @@
+[
+  { "id": "open_app",        "desc": "open or launch an app by name",        "params": ["app_name"] },
+  { "id": "close_app",       "desc": "close or quit an app by name",         "params": ["app_name"] },
+
+  { "id": "write_note",      "desc": "save given text as a new note",        "params": ["content"] },
+  { "id": "search_notes",    "desc": "find notes matching a query",          "params": ["query"] },
+  { "id": "delete_note",     "desc": "delete a note by title or content match", "params": ["query"] },
+
+  { "id": "web_search",      "desc": "search a query on the internet",       "params": ["query"] },
+  { "id": "open_url",        "desc": "open a specific website or link",      "params": ["url"] },
+
+  { "id": "play_media",      "desc": "play a song, artist, playlist, or podcast", "params": ["query"] },
+  { "id": "pause_media",     "desc": "pause current playback",               "params": [] },
+  { "id": "next_track",      "desc": "skip to next track",                   "params": [] },
+  { "id": "previous_track",  "desc": "go to previous track",                 "params": [] },
+  { "id": "set_volume",      "desc": "set system or media volume level",     "params": ["level"] },
+
+  { "id": "call_contact",    "desc": "place a phone or voice call to a contact", "params": ["contact_name"] },
+  { "id": "send_message",    "desc": "send a text/chat message to a contact",    "params": ["contact_name", "content"] },
+  { "id": "send_email",      "desc": "send an email to a recipient",         "params": ["recipient", "subject", "content"] },
+
+  { "id": "set_alarm",       "desc": "set an alarm for a given time",        "params": ["time"] },
+  { "id": "set_timer",       "desc": "start a countdown timer",              "params": ["duration"] },
+  { "id": "set_reminder",    "desc": "create a reminder for a task/time",    "params": ["content", "time"] },
+  { "id": "add_calendar_event", "desc": "add an event to the calendar",      "params": ["title", "time"] },
+
+  { "id": "check_weather",   "desc": "get current or forecasted weather",    "params": ["location"] },
+  { "id": "navigate_to",     "desc": "start turn-by-turn navigation to a place", "params": ["destination"] },
+  { "id": "translate_text",  "desc": "translate given text to another language", "params": ["content", "target_language"] },
+
+  { "id": "toggle_wifi",     "desc": "turn wifi on or off",                  "params": ["state"] },
+  { "id": "toggle_bluetooth","desc": "turn bluetooth on or off",             "params": ["state"] },
+  { "id": "toggle_flashlight","desc": "turn flashlight on or off",          "params": ["state"] },
+  { "id": "set_brightness",  "desc": "set screen brightness level",         "params": ["level"] },
+  { "id": "take_photo",      "desc": "open camera and take a photo",        "params": [] },
+  { "id": "take_screenshot", "desc": "capture the current screen",          "params": [] }
+]
