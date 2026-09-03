@@ -1,37 +1,90 @@
 [
-  { "id": "open_app",        "desc": "open or launch an app by name",        "params": ["app_name"] },
-  { "id": "close_app",       "desc": "close or quit an app by name",         "params": ["app_name"] },
-
-  { "id": "write_note",      "desc": "save given text as a new note",        "params": ["content"] },
-  { "id": "search_notes",    "desc": "find notes matching a query",          "params": ["query"] },
-  { "id": "delete_note",     "desc": "delete a note by title or content match", "params": ["query"] },
-
-  { "id": "web_search",      "desc": "search a query on the internet",       "params": ["query"] },
-  { "id": "open_url",        "desc": "open a specific website or link",      "params": ["url"] },
-
-  { "id": "play_media",      "desc": "play a song, artist, playlist, or podcast", "params": ["query"] },
-  { "id": "pause_media",     "desc": "pause current playback",               "params": [] },
-  { "id": "next_track",      "desc": "skip to next track",                   "params": [] },
-  { "id": "previous_track",  "desc": "go to previous track",                 "params": [] },
-  { "id": "set_volume",      "desc": "set system or media volume level",     "params": ["level"] },
-
-  { "id": "call_contact",    "desc": "place a phone or voice call to a contact", "params": ["contact_name"] },
-  { "id": "send_message",    "desc": "send a text/chat message to a contact",    "params": ["contact_name", "content"] },
-  { "id": "send_email",      "desc": "send an email to a recipient",         "params": ["recipient", "subject", "content"] },
-
-  { "id": "set_alarm",       "desc": "set an alarm for a given time",        "params": ["time"] },
-  { "id": "set_timer",       "desc": "start a countdown timer",              "params": ["duration"] },
-  { "id": "set_reminder",    "desc": "create a reminder for a task/time",    "params": ["content", "time"] },
-  { "id": "add_calendar_event", "desc": "add an event to the calendar",      "params": ["title", "time"] },
-
-  { "id": "check_weather",   "desc": "get current or forecasted weather",    "params": ["location"] },
-  { "id": "navigate_to",     "desc": "start turn-by-turn navigation to a place", "params": ["destination"] },
-  { "id": "translate_text",  "desc": "translate given text to another language", "params": ["content", "target_language"] },
-
-  { "id": "toggle_wifi",     "desc": "turn wifi on or off",                  "params": ["state"] },
-  { "id": "toggle_bluetooth","desc": "turn bluetooth on or off",             "params": ["state"] },
-  { "id": "toggle_flashlight","desc": "turn flashlight on or off",          "params": ["state"] },
-  { "id": "set_brightness",  "desc": "set screen brightness level",         "params": ["level"] },
-  { "id": "take_photo",      "desc": "open camera and take a photo",        "params": [] },
-  { "id": "take_screenshot", "desc": "capture the current screen",          "params": [] }
+  {
+    "id": "open_app",
+    "desc": "open or launch an app by name",
+    "tier": "core",
+    "triggers": ["open", "launch", "start app"],
+    "params": [{ "name": "app_name", "type": "string", "required": true, "desc": "app name, e.g. notepad, chrome, calc" }],
+    "keywords": ["launch", "start app"],
+    "examples": ["open notepad", "launch chrome"],
+    "handler": { "type": "shell", "command": "Start-Process \"{app_name}\"", "timeout": 15 },
+    "risk": "safe"
+  },
+  {
+    "id": "close_app",
+    "desc": "close or kill an app by process name",
+    "tier": "core",
+    "triggers": ["close", "quit app", "kill process"],
+    "params": [{ "name": "app_name", "type": "string", "required": true, "desc": "process name, e.g. notepad, chrome" }],
+    "keywords": ["close", "quit app", "kill process"],
+    "examples": ["close notepad", "kill process chrome"],
+    "handler": { "type": "shell", "command": "Stop-Process -Name \"{app_name}\" -Force -ErrorAction SilentlyContinue", "timeout": 15 },
+    "risk": "confirm"
+  },
+  {
+    "id": "open_url",
+    "desc": "open a website or link in the default browser",
+    "tier": "core",
+    "triggers": ["open", "go to"],
+    "params": [{ "name": "url", "type": "string", "required": true, "desc": "full url or domain" }],
+    "keywords": ["open https", "open http", "go to"],
+    "examples": ["open https://github.com", "go to youtube.com"],
+    "handler": { "type": "shell", "command": "Start-Process \"{url}\"", "timeout": 15 },
+    "risk": "safe"
+  },
+  {
+    "id": "set_volume",
+    "desc": "set system volume to a 0-100 level",
+    "tier": "core",
+    "triggers": ["set volume", "volume to"],
+    "params": [{ "name": "level", "type": "integer", "required": true, "desc": "volume level 0-100" }],
+    "keywords": ["set volume", "volume to"],
+    "examples": ["set volume 50", "volume to 30"],
+    "handler": { "type": "builtin", "fn": "set_volume" },
+    "risk": "safe"
+  },
+  {
+    "id": "write_note",
+    "desc": "save given text as a new note file",
+    "tier": "core",
+    "triggers": ["note down", "note that", "write note", "remember"],
+    "params": [{ "name": "content", "type": "string", "required": true, "desc": "note content" }],
+    "keywords": ["note down", "note that", "write note", "remember"],
+    "examples": ["note down buy milk tomorrow", "remember meeting at 3pm"],
+    "handler": { "type": "builtin", "fn": "write_note" },
+    "risk": "safe"
+  },
+  {
+    "id": "search_notes",
+    "desc": "find saved notes matching a query",
+    "tier": "core",
+    "triggers": ["search notes", "find note", "search my notes"],
+    "params": [{ "name": "query", "type": "string", "required": true, "desc": "text to search notes for" }],
+    "keywords": ["search notes", "find note", "search my notes"],
+    "examples": ["search notes milk", "find note meeting"],
+    "handler": { "type": "builtin", "fn": "search_notes" },
+    "risk": "safe"
+  },
+  {
+    "id": "toggle_wifi",
+    "desc": "turn wifi on or off",
+    "tier": "core",
+    "triggers": ["wifi", "toggle wifi"],
+    "params": [{ "name": "state", "type": "string", "required": true, "desc": "on or off" }],
+    "keywords": ["wifi on", "wifi off", "toggle wifi"],
+    "examples": ["wifi off", "wifi on"],
+    "handler": { "type": "shell", "command": "netsh interface set interface \"Wi-Fi\" {state}", "timeout": 20 },
+    "risk": "confirm"
+  },
+  {
+    "id": "set_timer",
+    "desc": "start a countdown timer that beeps when done",
+    "tier": "core",
+    "triggers": ["set timer", "start timer", "timer for"],
+    "params": [{ "name": "duration", "type": "string", "required": true, "desc": "timer duration, e.g. 30s, 5m, 1h30m" }],
+    "keywords": ["set timer", "start timer", "timer for"],
+    "examples": ["set timer 30s", "start timer 5m", "timer for 1h30m"],
+    "handler": { "type": "builtin", "fn": "set_timer" },
+    "risk": "safe"
+  }
 ]

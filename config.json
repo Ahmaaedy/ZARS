@@ -1,0 +1,12 @@
+{
+  "model": "zars-local",
+  "host": "http://localhost:11434",
+  "temperature": 1,
+  "step_budget": 4,
+  "output_head": 2000,
+  "output_tail": 1200,
+  "shell_timeout": 30,  
+  "skill_timeout": 60,
+  "notes_dir": "notes",
+  "num_ctx": 8192
+}
