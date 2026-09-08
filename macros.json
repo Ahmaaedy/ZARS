@@ -1,0 +1,23 @@
+{
+  "cleanup": {
+    "description": "close all non-background aps",
+    "type": "skill",
+    "trigger": "cleanup",
+    "created": "2026-08-27T20:26:12.318199+00:00",
+    "skill_path": "C:\\Users\\AceNo\\OneDrive\\Desktop\\pROjEcTs\\zars\\skills\\cleanup\\skill.py"
+  },
+  "lets_cook": {
+    "description": "open following, brave in second half of secondary screen, notes in first half of second screen, and vscode on the main screen",
+    "type": "skill",
+    "trigger": "lets_cook",
+    "created": "2026-08-27T23:43:36.612466+00:00",
+    "skill_path": "C:\\Users\\AceNo\\OneDrive\\Desktop\\pROjEcTs\\zars\\skills\\lets cook\\skill.py"
+  },
+  "good_morning": {
+    "description": "open news page",
+    "type": "skill",
+    "trigger": "good_morning",
+    "created": "2026-08-29T22:15:12.798407+00:00",
+    "skill_path": "C:\\Users\\AceNo\\OneDrive\\Desktop\\pROjEcTs\\zars\\skills\\good morning\\skill.py"
+  }
+}
