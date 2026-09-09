@@ -9,3 +9,8 @@ from pathlib import Path
 def main():
     ns = build_parser(manifest_for(__file__)).parse_args()
     try:
+        result = subprocess.run(
+            ["powershell", "-Command", f"""
+$displays = [System.Windows.Forms.Screen]::AllScreens
+$secondary = $displays[1].Bounds
+$halfWidth = [math]::Floor($secondary.Width / 2)
