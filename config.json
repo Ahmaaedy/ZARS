@@ -1,12 +1,9 @@
 {
-  "model": "zars-local",
+  "provider": "ollama",
+  "model": "ZARS",
   "host": "http://localhost:11434",
+  "api_key": "",
   "temperature": 1,
-  "step_budget": 4,
+  "step_budget": 10,
   "output_head": 2000,
   "output_tail": 1200,
-  "shell_timeout": 30,  
-  "skill_timeout": 60,
-  "notes_dir": "notes",
-  "num_ctx": 8192
-}
