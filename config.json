@@ -1,2 +1,23 @@
-
+  "temperature": 1,
+  "step_budget": 10,
+  "output_head": 2000,
+  "output_tail": 1200,
+  "shell_timeout": 30,
+  "skill_timeout": 60,
+  "notes_dir": "notes",
+  "num_ctx": 16384,
+  "search_roots": [
+    "~/Desktop",
+    "~/Documents",
+    "~/Downloads",
     "~/Pictures",
+    "~/Videos",
+    "~/Music",
+    "C:\\Users\\AceNo\\OneDrive\\Desktop",
+    "C:\\Users\\AceNo\\OneDrive\\Documents",
+    "C:\\Users\\AceNo\\OneDrive\\Downloads",
+    "C:\\Users\\AceNo\\OneDrive\\Pictures",
+    "C:\\Users\\AceNo\\OneDrive\\Desktop\\pROjEcTs\\zars\\screenshots"
+  ],
+  "telegram_config": "config/telegram.json"
+}
