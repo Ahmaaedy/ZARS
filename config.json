@@ -1,7 +1,2 @@
-  "output_tail": 1200,
-  "shell_timeout": 30,
-  "skill_timeout": 60,
-  "notes_dir": "notes",
-  "num_ctx": 16384,
-  "search_roots": [
-    "~/Desktop",
+
+    "~/Pictures",
