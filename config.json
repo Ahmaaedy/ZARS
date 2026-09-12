@@ -1,3 +1,8 @@
+{
+  "provider": "ollama",
+  "model": "ZARS",
+  "host": "http://localhost:11434",
+  "api_key": "",
   "temperature": 1,
   "step_budget": 10,
   "output_head": 2000,
