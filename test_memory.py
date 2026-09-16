@@ -20,3 +20,24 @@ def make_config(tmpdir):
 
 def cleanup(path):
     shutil.rmtree(path, ignore_errors=True)
+
+
+# ========== SHORT-TERM MEMORY ==========
+
+def test_save_load_roundtrip():
+    tmpdir = Path(tempfile.mkdtemp())
+    try:
+        config = make_config(tmpdir)
+        mem = ConversationMemory(config)
+        assert mem.count() == 0, "fresh memory should be empty"
+
+        mem.add("user", "hello there")
+        mem.add("assistant", "hey!")
+        assert mem.count() == 2
+
+        # Create a NEW instance to verify disk persistence
+        mem2 = ConversationMemory(config)
+        assert mem2.count() == 2, "reloaded memory should have 2 messages"
+        recent = mem2.get_recent()
+        assert recent[0]["role"] == "user"
+        assert recent[0]["content"] == "hello the
