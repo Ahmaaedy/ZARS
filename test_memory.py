@@ -1,13 +1,22 @@
-
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from zars_sdk import build_parser, emit, manifest_for
-import subprocess
+"""Rigorous tests for the memory system."""
+import json
+import shutil
+import tempfile
 from pathlib import Path
 
-def main():
-    ns = build_parser(manifest_for(__file__)).parse_args()
-    try:
-        result = subprocess.run(
-            ["powershell", "-Command", f"""
+from core.memory import ConversationMemory
+from core.longterm_memory import LongTermMemory
+from core.session import Session
+from core.config import Config
+
+
+def make_config(tmpdir):
+    """Create a config pointing at a temp directory."""
+    c = Config()
+    c.memory_dir = str(tmpdir / "memory")
+    c.memory_recent = 5
+    return c
+
+
+def cleanup(path):
+    shutil.rmtree(path, ignore_errors=True)
