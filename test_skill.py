@@ -27,3 +27,6 @@ Write-Output \"Applications launched\"
 """],
             capture_output=True, text=True, timeout=30
         )
+        emit(True, result.stdout.strip())
+    except Exception as e:
+        emit(False, str(e))
