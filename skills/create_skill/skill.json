@@ -1,0 +1,16 @@
+{
+  "id": "create_skill",
+  "desc": "generate a new ZARS skill from a natural language description",
+  "params": [
+    { "name": "description", "type": "string", "required": true, "desc": "what the skill should do" },
+    { "name": "skill_id", "type": "string", "required": false, "desc": "custom skill name (default: auto-generated from description)" }
+  ],
+  "triggers": ["create skill", "make skill", "new skill", "generate skill", "build skill"],
+  "keywords": ["create a skill", "make a skill", "new skill", "generate a skill", "build a skill", "skill creator", "skill generator"],
+  "examples": ["create a skill that opens chrome and notepad", "make a skill to check disk space"],
+  "risk": "safe",
+  "handler": {
+    "type": "skill",
+    "timeout": 360
+  }
+}

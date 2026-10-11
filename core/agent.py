@@ -1,10 +1,12 @@
 import json
 
 from rich.panel import Panel
-from rich.prompt import Prompt
 
+from . import interactive
 from .executor import ExecError, ExecResult, execute, run_shell
 from .llm import LLM, LLMError
+from .longterm_memory import LongTermMemory
+from .memory import ConversationMemory
 from .registry import RegistryError, render_template
 from .router import Router
 from .safety import check_blocked
@@ -22,6 +24,8 @@ class Agent:
         self.macros = macro_manager
         self.router = Router(registry, macro_manager)
         self.llm = LLM(config, registry)
+        self.memory = ConversationMemory(config)
+        self.longterm = LongTermMemory(config)
         self._confirm_rejections = 0
 
     def reload(self, registry):
@@ -44,6 +48,29 @@ class Agent:
         if self._handle_macro_intent(text):
             return
         self._llm_loop(text)
+
+    def handle_voice(self, text, llm=None):
+        """Same routing as handle(), but returns the final answer as a string
+        so the voice loop can speak it. handle() ignores the return value, so
+        this is additive.
+
+        `llm` lets the voice pipeline inject a provider (local or Groq) without
+        mutating self.llm, so CLI requests always use the configured backend.
+        """
+        entry, args = self.router.match(text)
+        if entry:
+            self.console.print(f"[bold blue]->[/bold blue] [bold]{entry.id}[/bold]({self._args_str(args)}) [dim](core)[/dim]")
+            result, _ = self._run_entry(entry, args)
+            self._show(result, entry.id)
+            return result.display or ""
+        if self.macros:
+            macro_trigger = self.macros.match(text)
+            if macro_trigger:
+                self._run_macro(macro_trigger)
+                return f"{macro_trigger} done"
+        if self._handle_macro_intent(text):
+            return ""
+        return self._llm_loop(text, llm=llm) or ""
 
     def _handle_macro_intent(self, text):
         t = text.lower().strip()
@@ -101,8 +128,10 @@ class Agent:
             return False
         self.console.print(Panel(plan, title="confirm", border_style="yellow"))
         try:
-            answer = Prompt.ask("run this? [y/N]", default="n")
+            answer = interactive.ask("run this? [y/N]", default="n")
         except (KeyboardInterrupt, EOFError):
+            answer = "n"
+        if answer is None:
             answer = "n"
         ok = answer.strip().lower() in ("y", "yes")
         if not ok:
@@ -197,8 +226,12 @@ class Agent:
             return ""
         return ", ".join(f"{k}={v!r}" for k, v in args.items())
 
-    def _llm_loop(self, text):
-        session = Session(self.llm.system_prompt())
+    def _llm_loop(self, text, llm=None):
+        llm = llm or self.llm
+        session = Session(llm.system_prompt())
+        recent = self.memory.get_recent(10)
+        if recent:
+            session.seed(recent)
         session.add("user", text)
         last_call = None
         failed_commands = set()
@@ -206,7 +239,7 @@ class Agent:
 
         for step in range(1, self.config.step_budget + 1):
             try:
-                pick = self.llm.pick(session.messages)
+                pick = llm.pick(session.messages)
             except LLMError as e:
                 self.console.print(f"[bold red]llm error:[/bold red] {e}")
                 return
@@ -219,13 +252,20 @@ class Agent:
                 resp = (pick.get("response") or "").strip()
                 if resp:
                     self.console.print(resp)
-                    return
+                    self.memory.add("user", text)
+                    self.memory.add("assistant", resp)
+                    self.longterm.save_conversation_turn(text, resp)
+                    return resp
                 session.add("assistant", json.dumps(pick, ensure_ascii=False))
                 session.tool_result("your response was empty. Summarize the results for the user now as JSON with tool=done.")
                 continue
             if tool == "ask":
-                self.console.print(f"[bold yellow]{pick.get('response') or 'clarification needed'}[/bold yellow]")
-                return
+                resp = pick.get("response") or "clarification needed"
+                self.console.print(f"[bold yellow]{resp}[/bold yellow]")
+                self.memory.add("user", text)
+                self.memory.add("assistant", resp)
+                self.longterm.save_conversation_turn(text, resp)
+                return resp
 
             if tool == "shell":
                 result, plan = self._run_shell_freeform(pick.get("command", ""), failed_commands)
@@ -250,11 +290,14 @@ class Agent:
 
             call_sig = (tool, json.dumps(pick.get("args", {}), sort_keys=True), (pick.get("command") or "").strip())
             if call_sig == last_call:
-                self.console.print("[yellow]model repeated the same action; stopping[/yellow]")
-                return
+                self.console.print("[yellow]model repeated the same action once; stopping[/yellow]")
+                if call_sig == last_call:
+                        self.console.print("[yellow]model repeated the same action twice; stopping[/yellow]")
+                        return
             last_call = call_sig
 
             if not result.ok and result.model_text.startswith(("blocked", "abort")):
                 return
 
         self.console.print(f"[yellow]step budget reached ({self.config.step_budget})[/yellow]")
+        return ""

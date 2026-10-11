@@ -106,35 +106,46 @@ def print_macros(console, macros):
 
 
 def handle_macro_add(console, macros, registry, config):
-    from rich.prompt import Prompt
-    trigger = Prompt.ask("What should the trigger word be?").strip()
+    from . import interactive
+    trigger = (interactive.ask("What should the trigger word be?") or "").strip()
     if not trigger:
         console.print("[red]cancelled[/red]")
         return
     if macros.has(trigger):
         console.print(f"[red]macro '{trigger}' already exists[/red]")
         return
-    description = Prompt.ask(f"What should '{trigger}' do?").strip()
+    description = (interactive.ask(f"What should '{trigger}' do?") or "").strip()
     if not description:
         console.print("[red]cancelled[/red]")
         return
-    mode = Prompt.ask("Generate a Python skill, or chain existing commands?", choices=["skill", "sequence"], default="skill")
+    mode = interactive.ask(
+        "Generate a Python skill, or chain existing commands?",
+        default="skill", choices=["skill", "sequence"],
+    )
+    if mode is None:
+        console.print("[red]cancelled[/red]")
+        return
     if mode == "skill":
-        console.print("[dim]generating skill with opencode...[/dim]")
+        from rich.panel import Panel
         from .skillgen import generate_skill, save_skill
-        skill_json, skill_py = generate_skill(config, description, skill_id=trigger)
+        console.print(Panel("[dim]generating skill...[/dim]", title="skill generation", border_style="blue"))
+        skill_json, skill_py = generate_skill(config, description, skill_id=trigger, console=console)
         if skill_json is None or skill_py is None:
             console.print(f"[red]{skill_py or 'generation failed'}[/red]")
             return
-        skill_path = save_skill(trigger, skill_json, skill_py)
-        macros.add_skill(trigger, description, skill_path)
-        console.print(f"[green]macro '{trigger}' saved[/green] (skill: {skill_path})")
+        path = save_skill(trigger, skill_json, skill_py)
+        macros.add_skill(trigger, description, path)
+        console.print(f"[green]macro '{trigger}' saved[/green] (skill: {path})")
     else:
         steps = []
         console.print("[dim]enter steps as: tool_name arg1=value1 arg2=value2[/dim]")
         console.print("[dim]type 'done' when finished[/dim]")
         while True:
-            line = Prompt.ask("step").strip()
+            line = interactive.ask("step")
+            if line is None:
+                console.print("[red]cancelled[/red]")
+                return
+            line = line.strip()
             if line.lower() == "done":
                 break
             parts = line.split()

@@ -1,0 +1,27 @@
+{
+  "id": "send_file_quickshare",
+  "desc": "Send a file to another device using QuickShare",
+  "params": [
+    {
+      "name": "file_path",
+      "type": "string",
+      "required": true,
+      "desc": "Path to the file to send via QuickShare"
+    }
+  ],
+  "keywords": [
+    "quickshare",
+    "send file",
+    "file transfer",
+    "share",
+    "send"
+  ],
+  "examples": [
+    "send_file_quickshare --file \"C:\\Users\\User\\Documents\\example.txt\"",
+    "send_file_quickshare -f \"D:\\Downloads\\report.pdf\""
+  ],
+  "risk": "safe",
+  "handler": {
+    "type": "skill"
+  }
+}

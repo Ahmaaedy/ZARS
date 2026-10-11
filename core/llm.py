@@ -1,6 +1,5 @@
 import json
-
-from ollama import Client
+from datetime import datetime
 
 TOOL_IDS_EXTRA = ["shell", "done", "ask"]
 
@@ -13,7 +12,16 @@ class LLM:
     def __init__(self, config, registry):
         self.config = config
         self.registry = registry
-        self.client = Client(host=config.host)
+        self.provider = getattr(config, "provider", "ollama")
+
+        if self.provider == "ollama":
+            from ollama import Client
+            self.client = Client(host=config.host)
+        elif self.provider == "gemini":
+            from google import genai
+            self.client = genai.Client(api_key=config.api_key)
+        else:
+            raise LLMError(f"unknown provider: {self.provider!r}")
 
     def _registry_lines(self):
         lines = []
@@ -26,6 +34,7 @@ class LLM:
     def system_prompt(self):
         return (
             "You are ZARS, an on-device terminal assistant for Windows (PowerShell).\n"
+            f"Current date and time: {datetime.now().strftime('%A, %B %d, %Y %I:%M %p')}\n"
             "You complete the user's request by choosing ONE action per turn, as JSON.\n\n"
             "Available tools:\n"
             f"{self._registry_lines()}\n\n"
@@ -43,6 +52,8 @@ class LLM:
             "- For questions you can answer directly (math, facts, explanations), use done immediately.\n"
             "- Never use tools for questions you can answer yourself.\n"
             "- For casual greetings or conversation (hello, hey, what's up, how are you, etc.), use done to respond naturally and briefly.\n"
+            "- You may receive fuzzy match hints. If a fuzzy match is provided and seems correct, use that tool. If ambiguous, pick the best match or ask for clarification.\n"
+            "- If the user wants to create, make, build, or generate a new skill, use the 'create_skill' tool with a description of what the skill should do.\n"
             "- If no tool fits, use done to explain what tools are available. Never guess or hallucinate shell commands.\n\n"
             "Examples:\n"
             'User: what is 2+2\n'
@@ -79,18 +90,57 @@ class LLM:
 
     def pick(self, messages):
         try:
-            response = self.client.chat(
-                model=self.config.model,
-                messages=messages,
-                format=self.tool_schema(),
-                options={
-                    "temperature": self.config.temperature,
-                    "num_ctx": self.config.num_ctx,
-                },
-            )
+            if self.provider == "ollama":
+                content = self._pick_ollama(messages)
+            elif self.provider == "gemini":
+                content = self._pick_gemini(messages)
+            else:
+                raise LLMError(f"unknown provider: {self.provider!r}")
+        except LLMError:
+            raise
         except Exception as e:
             raise LLMError(f"model call failed: {e}") from e
-        content = response["message"]["content"]
+        return self._parse_response(content)
+
+    def _pick_ollama(self, messages):
+        response = self.client.chat(
+            model=self.config.model,
+            messages=messages,
+            format=self.tool_schema(),
+            options={
+                "temperature": self.config.temperature,
+                "num_ctx": self.config.num_ctx,
+            },
+        )
+        return response["message"]["content"]
+
+    def _pick_gemini(self, messages):
+        from google.genai import types
+
+        system_instruction = None
+        contents = []
+        for msg in messages:
+            if msg["role"] == "system" and system_instruction is None:
+                system_instruction = msg["content"]
+            else:
+                contents.append(types.Content(
+                    role="user" if msg["role"] != "assistant" else "model",
+                    parts=[types.Part.from_text(text=msg["content"])],
+                ))
+
+        response = self.client.models.generate_content(
+            model=self.config.model,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_schema=self.tool_schema(),
+                temperature=self.config.temperature,
+            ),
+        )
+        return response.text
+
+    def _parse_response(self, content):
         try:
             data = json.loads(content)
         except json.JSONDecodeError as e:

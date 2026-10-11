@@ -1,0 +1,12 @@
+{
+  "id": "file_find",
+  "desc": "find files by free-text description using fuzzy matching",
+  "params": [
+    { "name": "query", "type": "string", "required": true, "desc": "free-text description of the file to find" },
+    { "name": "max_results", "type": "integer", "required": false, "default": 5, "desc": "max number of results to return" }
+  ],
+  "keywords": ["find file", "search file", "locate file", "where is"],
+  "examples": ["find my resume", "search for budget spreadsheet", "locate vacation photos"],
+  "handler": { "timeout": 30 },
+  "risk": "safe"
+}

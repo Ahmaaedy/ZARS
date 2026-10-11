@@ -1,0 +1,12 @@
+{
+  "id": "media_control",
+  "desc": "control media playback: play, pause, next, previous",
+  "params": [
+    { "name": "action", "type": "string", "required": true, "desc": "play, pause, toggle, next, or previous" }
+  ],
+  "triggers": ["play", "pause", "toggle", "next track", "previous track", "skip track", "media"],
+  "keywords": ["play music", "pause music", "next song", "previous song", "skip track", "media"],
+  "examples": ["pause music", "next song", "play", "previous track"],
+  "handler": { "timeout": 10 },
+  "risk": "safe"
+}

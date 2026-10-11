@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+notes/
+memory/
+config/telegram.json
+macros.json
+
+# secrets -- never commit
+.env
+*.session
+
+# scratch script with a hardcoded API key
+ooglyboogly.py
+
+# local voice models (fetched separately, ~340 MB)
+models/
+
+# test scratch audio
+models/_*.wav

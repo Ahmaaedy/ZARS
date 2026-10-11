@@ -1,0 +1,48 @@
+{
+  "id": "pc-stats",
+  "desc": "Retrieves comprehensive hardware and performance statistics from Windows including CPU/GPU temperatures, memory usage, disk activity, fan speed, load, processes, and driver details.",
+  "params": [
+    {
+      "name": "IncludeGPU",
+      "type": "boolean",
+      "required": false,
+      "desc": "If true, includes GPU temperature data (if available)."
+    },
+    {
+      "name": "OutputFormat",
+      "type": "string",
+      "required": false,
+      "desc": "Desired output format: 'text' for console, 'json' for structured data."
+    },
+    {
+      "name": "FilterProcess",
+      "type": "string",
+      "required": false,
+      "desc": "Optional process name filter to display only matching processes."
+    }
+  ],
+  "keywords": [
+    "system stats",
+    "hardware info",
+    "CPU temperature",
+    "GPU temperature",
+    "memory usage",
+    "disk activity",
+    "fan speed",
+    "load average",
+    "WMI sensors",
+    "process info",
+    "driver stats",
+    "performance",
+    "pc stats"
+  ],
+  "examples": [
+    "pc-stats",
+    "pc-stats -IncludeGPU $true -OutputFormat json",
+    "pc-stats -FilterProcess \"chrome\""
+  ],
+  "risk": "safe",
+  "handler": {
+    "type": "skill"
+  }
+}

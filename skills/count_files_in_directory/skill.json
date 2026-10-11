@@ -1,0 +1,9 @@
+{
+  "id": "count_files_in_directory",
+  "desc": "Count the number of files in a directory",
+  "params": [{"name": "directory", "type": "string", "required": true, "desc": "Directory path"}],
+  "keywords": ["count", "files", "directory", "number"],
+  "examples": ["count files in C:\\Users\\example"],
+  "handler": {"timeout": 30},
+  "risk": "safe"
+}

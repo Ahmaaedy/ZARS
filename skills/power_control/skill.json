@@ -1,0 +1,12 @@
+{
+  "id": "power_control",
+  "desc": "lock, sleep, hibernate, restart, shut down, or cancel a pending power action",
+  "params": [
+    { "name": "action", "type": "string", "required": true, "desc": "lock, sleep, hibernate, restart, shutdown, or cancel" },
+    { "name": "delay", "type": "integer", "required": false, "default": 30, "desc": "seconds before restart/shutdown (min 10, default 30)" }
+  ],
+  "keywords": ["lock computer", "sleep computer", "hibernate", "restart computer", "shutdown computer", "cancel shutdown"],
+  "examples": ["lock computer", "restart in 30 seconds", "shutdown now", "cancel shutdown", "hibernate"],
+  "handler": { "timeout": 15 },
+  "risk": "confirm"
+}

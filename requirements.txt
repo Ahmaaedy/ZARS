@@ -1,0 +1,49 @@
+# ZARS dependencies (Python 3.13, Windows)
+#
+# install:  pip install -r requirements.txt
+
+# --- core runtime ---
+ollama
+rich
+requests
+python-dotenv
+numpy
+# animations/display_over.py overlay
+sounddevice
+
+# --- optional LLM providers (core/llm.py lazy imports) ---
+google-genai
+
+# --- skill generation (core/skillgen.py) ---
+openrouter
+
+# --- skills ---
+beautifulsoup4          # web_search
+Pillow                  # screenshot_ocr
+pyperclip               # screenshot_ocr
+pywin32                 # win32com: skills/file_find + SAPI test helpers
+telethon                # notify_send
+# screenshot_ocr OCR backend (WinRT bindings, one pip pkg per namespace):
+# winrt-Windows.Media.Ocr winrt-Windows.Globalization winrt-Windows.Graphics.Imaging winrt-Windows.Storage
+
+# --- dev / tests ---
+rapidfuzz               # core/fuzzy_match (exercised by tests)
+
+# --- voice pipeline (core/voice/, `python main.py --voice`) ---
+# All offline. Wake-word and VAD models ship inside their wheels; the Whisper
+# and Kokoro model files live in models/ and are loaded from local paths only.
+openwakeword==0.6.0     # wake word, ONNX backend
+silero-vad==6.2.1       # endpointing, ONNX backend
+faster-whisper==1.2.1   # STT, int8 on CPU
+kokoro-onnx==0.6.1      # TTS, ONNX backend
+sounddevice>=0.5.0      # mic capture + playback
+soundfile>=0.12.0       # wav I/O for test_voice.py / test_groq.py
+numpy>=2.0.2            # audio buffers
+onnxruntime>=1.20.1     # wake word / VAD / Kokoro inference
+torch                   # silero_vad passes torch tensors
+
+# --- optional: online mode (ZARS_MODE=online) ---
+# Only used when .env sets ZARS_MODE=online and a GROQ_API_KEY is provided.
+# Offline mode never imports these.
+groq==1.0.0              # STT + chat for online mode
+python-dotenv>=1.0.0    # reads .env for ZARS_MODE / GROQ_* / fallback

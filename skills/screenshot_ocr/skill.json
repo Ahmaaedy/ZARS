@@ -1,0 +1,14 @@
+{
+  "id": "screenshot_ocr",
+  "desc": "capture screen, extract text via OCR, copy to clipboard",
+  "params": [
+    { "name": "mode", "type": "string", "required": true, "desc": "full, active_window, or region" },
+    { "name": "region", "type": "string", "required": false, "desc": "x,y,w,h for region mode" },
+    { "name": "lang", "type": "string", "required": false, "default": "en-US", "desc": "OCR language code" },
+    { "name": "keep_image", "type": "boolean", "required": false, "desc": "keep the captured PNG after OCR" }
+  ],
+  "keywords": ["ocr", "screenshot text", "extract text", "read screen", "screen to text"],
+  "examples": ["extract text from screen", "ocr my screen", "read text from screenshot"],
+  "handler": { "timeout": 30 },
+  "risk": "safe"
+}

@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -9,9 +10,14 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from zars_sdk import build_parser, emit, manifest_for
+from openrouter import OpenRouter
+from openrouter.types import UNSET
+from rich.console import Console
+from rich.live import Live
+from rich.panel import Panel
+from rich.text import Text
 
-MODEL = "gemma4:12b"
-MAX_TOKENS = 2048
+MODEL = "cohere/north-mini-code:free"
 
 MANIFEST_PROMPT = """You are generating a ZARS skill manifest (Windows, PowerShell, Python 3.13).
 Output a JSON object with these keys:
@@ -63,15 +69,35 @@ Task: {description}
 Output raw Python code only. No markdown, no explanation."""
 
 
-def _call_opencode(prompt):
-    from ollama import Client
-    client = Client(host="http://localhost:11434")
-    response = client.chat(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        options={"temperature": 0.1, "num_ctx": 8192},
-    )
-    return response["message"]["content"]
+def _call_openrouter(prompt):
+    with OpenRouter() as client:
+        res = client.chat.send(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            stream=False,
+        )
+        return res.choices[0].message.content
+
+
+def _call_openrouter_stream(prompt):
+    full = []
+    with OpenRouter() as client:
+        stream = client.chat.send(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            stream=True,
+        )
+        for chunk in stream:
+            if chunk.error:
+                raise RuntimeError(f"stream error: {chunk.error.message}")
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            token = delta.content if delta.content is not UNSET else None
+            if token:
+                full.append(token)
+                yield token
+    return "".join(full)
 
 
 def _extract_json(content):
@@ -127,10 +153,19 @@ def _validate_manifest(manifest):
     return errors
 
 
-def _gen_manifest(description, skill_id):
-    content = _call_opencode(
-        MANIFEST_PROMPT.format(description=description, skill_id=skill_id)
-    )
+def _gen_manifest(description, skill_id, console=None):
+    prompt = MANIFEST_PROMPT.format(description=description, skill_id=skill_id)
+    output = Text()
+    panel = Panel(output, title="Generating Manifest...", border_style="cyan", expand=True)
+    try:
+        with Live(panel, console=Console(stderr=True), refresh_per_second=12) as live:
+            for token in _call_openrouter_stream(prompt):
+                output.append(token)
+                live.update(panel)
+        content = output.plain
+    except Exception:
+        content = _call_openrouter(prompt)
+
     if not content or not content.strip():
         return None, "model returned empty response for manifest"
     data = _extract_json(content.strip())
@@ -143,16 +178,27 @@ def _gen_manifest(description, skill_id):
     data["handler"] = {"type": "skill"}
     if "risk" not in data:
         data["risk"] = "safe"
+    if console:
+        console.print("[dim]manifest generated[/dim]")
     return data, None
 
 
-def _gen_code(manifest, description):
-    content = _call_opencode(
-        CODE_PROMPT.format(
-            manifest=json.dumps(manifest, indent=2),
-            description=description,
-        )
+def _gen_code(manifest, description, console=None):
+    prompt = CODE_PROMPT.format(
+        manifest=json.dumps(manifest, indent=2),
+        description=description,
     )
+    output = Text()
+    panel = Panel(output, title="Generating Code...", border_style="cyan", expand=True)
+    try:
+        with Live(panel, console=Console(stderr=True), refresh_per_second=12) as live:
+            for token in _call_openrouter_stream(prompt):
+                output.append(token)
+                live.update(panel)
+        content = output.plain
+    except Exception:
+        content = _call_openrouter(prompt)
+
     if not content or not content.strip():
         return None, "model returned empty response for code"
     code = _extract_code(content)
@@ -177,21 +223,23 @@ def _gen_code(manifest, description):
             seen_imports.add(stripped)
         lines.append(line)
     code = "\n".join(lines)
+    if console:
+        console.print("[dim]code generated[/dim]")
     return code, None
 
 
-def generate_skill(config, description, skill_id=None):
+def generate_skill(config, description, skill_id=None, console=None):
     try:
         if skill_id:
             trigger = skill_id
         else:
             trigger = re.sub(r"[^a-z0-9]+", "_", description.lower().strip())[:30].strip("_")
 
-        manifest, err = _gen_manifest(description, trigger)
+        manifest, err = _gen_manifest(description, trigger, console)
         if manifest is None:
             return None, err
 
-        code, err = _gen_code(manifest, description)
+        code, err = _gen_code(manifest, description, console)
         if code is None:
             return None, err
 

@@ -1,8 +1,4 @@
-I've written a minimal `skill.py` file to open and position the applications according to your requirements. However, I realize there's an issue with the positioning logic in the PowerShell command.
 
-Let me rewrite it with the correct positioning for "second half" vs "first half":
-
-```python
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -37,6 +33,3 @@ Write-Output \"Applications launched\"
 
 if __name__ == "__main__":
     main()
-```
-
-The positioning for brave is now correctly placed in the center of the secondary screen's second half, and notes is in the first half (top-left quadrant). Let me know if this looks good or if you need any adjustments!

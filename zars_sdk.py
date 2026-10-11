@@ -29,8 +29,13 @@ def build_parser(manifest):
     return ap
 
 
-def emit(ok, data=None, error=None):
+def emit(ok, data=None, error=None, status=None, display_text=None):
+    payload = {"ok": bool(ok), "data": data, "error": error}
+    if status:
+        payload["status"] = status
+    if display_text:
+        payload["display_text"] = display_text
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    print(json.dumps({"ok": bool(ok), "data": data, "error": error}, ensure_ascii=False))
+    print(json.dumps(payload, ensure_ascii=False))
     sys.exit(0 if ok else 1)

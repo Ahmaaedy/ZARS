@@ -1,0 +1,13 @@
+{
+  "id": "notify_send",
+  "desc": "send a text message or file to yourself via Telegram",
+  "params": [
+    { "name": "message", "type": "string", "required": false, "desc": "text message to send" },
+    { "name": "file_path", "type": "string", "required": false, "desc": "absolute path to a file to send" },
+    { "name": "caption", "type": "string", "required": false, "desc": "optional caption for the file" }
+  ],
+  "keywords": ["send message", "send file", "telegram", "notify me", "message me"],
+  "examples": ["send message hello there", "send file C:/Users/me/report.pdf"],
+  "handler": { "timeout": 30 },
+  "risk": "confirm"
+}

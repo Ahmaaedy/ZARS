@@ -13,9 +13,10 @@ python main.py --dry-run             # print actions without executing
 python main.py --no-confirm          # skip confirmation prompts (careful)
 python main.py --model gemma4:12b    # override model from config.json
 python main.py --exec "weather in cairo"   # one-shot request, then exit
+python main.py --voice              # offline voice mode
 ```
 
-Requires: Python 3.10+, `pip install ollama rich requests opencode-py python-dotenv`, and Ollama running
+Requires: Python 3.10+, `pip install -r requirements.txt`, and Ollama running
 with a small instruct model (see `config.json`).
 
 For skill generation (macro system), add your OpenRouter API key to `.env`:
@@ -89,6 +90,45 @@ Contract: args via `--param value` CLI flags, one JSON line on stdout
 
 `/help` `/commands` `/reload` `/shell <cmd>` `/dry-run` `/debug` `/clear` `/exit`
 
+## Offline vs online mode
+
+`ZARS_MODE` in `.env` (see `.env.example`) picks the backend:
+
+| Stage | `offline` (default) | `online` |
+|---|---|---|
+| Wake word | openWakeWord (local) | same |
+| VAD | Silero (local) | same |
+| STT | faster-whisper (local) | Groq Whisper API |
+| Reasoning | Ollama (local) | Groq chat API |
+| TTS | Kokoro (local) | same |
+| Router, tools, notes, memory | local | same |
+
+TTS is always on-device. Nothing streams while idle -- audio is only sent after
+the wake word fires and the VAD confirms speech.
+
+```powershell
+python main.py --voice                  # offline (default)
+$env:ZARS_MODE="online"; python main.py --voice   # online, this shell only
+```
+
+`ZARS_MODE=online` without a `GROQ_API_KEY` logs an error and runs offline. An
+invalid value warns and falls back to offline. With
+`ONLINE_FALLBACK_TO_LOCAL=true`, a Groq failure (no network, 401, 429, 5xx) logs
+the reason and uses the local stack for that request; local models are only
+loaded when a fallback actually happens.
+
+In online mode ZARS prints a notice at startup: recorded audio, the last 10
+conversation turns, and tool output are sent to Groq.
+
+Test the providers without a microphone:
+
+```
+python test_groq.py env       resolved mode and config (never prints the key)
+python test_groq.py stt       transcribe a generated sample wav
+python test_groq.py llm       stream one reply chunk by chunk
+python test_groq.py failures  bad key / no network / 429 / fallback-to-local
+```
+
 ## Configuration (`config.json`)
 
 | key | meaning |
@@ -101,3 +141,40 @@ Contract: args via `--param value` CLI flags, one JSON line on stdout
 | shell_timeout / skill_timeout | seconds |
 | notes_dir | where write_note/search_notes store notes |
 | num_ctx | model context window |
+
+## Voice mode (`--voice`)
+
+```
+idle --wake word--> listen --VAD endpoint--> faster-whisper --> LLM --> Kokoro --> idle
+```
+
+Fully offline. Everything runs on CPU; no cloud service is contacted.
+
+| stage | model | where it comes from |
+|---|---|---|
+| wake word | `hey_rhasspy` (openWakeWord, ONNX) | `models/wakeword/` |
+| endpointing | Silero VAD (ONNX) | `models/vad/` |
+| STT | faster-whisper tiny, int8 | `voice_whisper_model` (local dir) |
+| TTS | Kokoro-82M (ONNX) | `models/tts/` |
+
+Only the wake-word model is resident while idle. STT and TTS load on first use,
+or stay warm when `voice_keep_warm` is true. The mic is muted while speaking and
+for `voice_cooldown_s` afterwards, so the assistant cannot trigger its own wake
+word. Any failure (no mic, missing model, empty transcript) is logged and the
+loop returns to idle.
+
+Conversation memory is shared with the CLI. After `voice_session_reset_s` of
+silence the *in-memory* voice context clears; `memory/recent.json` and the CLI
+history are left untouched.
+
+Check each stage on its own:
+
+```
+python test_voice.py mic         # devices + 3s level check
+python test_voice.py wake        # live wake-word scores
+python test_voice.py vad         # live speech/silence decisions
+python test_voice.py stt --wav file.wav
+python test_voice.py tts         # speak one sentence
+python test_voice.py tts-stream  # streamed sentence playback
+python test_voice.py agent       # one full mic -> STT -> LLM -> TTS cycle
+```

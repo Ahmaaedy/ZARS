@@ -1,0 +1,22 @@
+{
+  "id": "lets cook",
+  "desc": "Open applications across multiple screens: Brave on secondary screen, notes on second screen, VSCode on main",
+  "params": [],
+  "keywords": [
+    "lets cook",
+    "setup workspace",
+    "application",
+    "window",
+    "screen",
+    "brave",
+    "vscode",
+    "notes"
+  ],
+  "examples": [
+    "lets cook to open brave, notes, and vscode on respective screens"
+  ],
+  "risk": "safe",
+  "handler": {
+    "type": "skill"
+  }
+}

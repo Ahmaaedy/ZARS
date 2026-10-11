@@ -1,0 +1,11 @@
+{
+  "id": "check_weather",
+  "desc": "get current weather and 3-day forecast for a location",
+  "params": [
+    { "name": "location", "type": "string", "required": true, "desc": "city or place name" }
+  ],
+  "keywords": ["weather", "forecast"],
+  "examples": ["weather in cairo", "check weather london"],
+  "handler": { "timeout": 45 },
+  "risk": "safe"
+}

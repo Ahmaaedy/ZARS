@@ -1,0 +1,11 @@
+{
+  "id": "take_screenshot",
+  "desc": "capture the current screen to a png file",
+  "params": [
+    { "name": "out", "type": "string", "required": false, "desc": "output png path" }
+  ],
+  "keywords": ["screenshot", "screen shot", "capture screen"],
+  "examples": ["take a screenshot", "screenshot"],
+  "handler": { "timeout": 30 },
+  "risk": "safe"
+}

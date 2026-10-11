@@ -1,0 +1,20 @@
+{
+  "id": "good morning",
+  "desc": "Open a news page",
+  "params": [],
+  "keywords": [
+    "news",
+    "page",
+    "browser",
+    "web"
+  ],
+  "examples": [
+    "open news page",
+    "show me news",
+    "launch news"
+  ],
+  "risk": "safe",
+  "handler": {
+    "type": "skill"
+  }
+}
