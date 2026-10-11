@@ -3,10 +3,11 @@
   "desc": "search the internet and return top results with titles, urls and snippets",
   "params": [
     { "name": "query", "type": "string", "required": true, "desc": "what to search for" },
-    { "name": "max", "type": "integer", "required": false, "default": 1, "desc": "max results" }
+    { "name": "max", "type": "integer", "required": false, "default": 3, "desc": "max results" }
   ],
   "keywords": ["web search", "google", "look up"],
   "examples": ["search for best chocolate cake recipe", "search how to bake a cake"],
   "handler": { "timeout": 60 },
+  "tier": "core",
   "risk": "safe"
 }

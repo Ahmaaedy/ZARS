@@ -1,122 +1,119 @@
-import re
 import sys
-from html import unescape
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from zars_sdk import build_parser, emit, manifest_for
 
-
-def clean_html(text):
-    text = re.sub(r"<[^>]+>", "", text)
-    return unescape(text).replace("\n", " ").strip()
-
-
-def unwrap_url(url):
-    if url.startswith("//"):
-        url = "https:" + url
-    if "uddg=" in url:
-        q = parse_qs(urlparse(url).query)
-        if "uddg" in q:
-            return unquote(q["uddg"][0])
-    return url
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+SNIPPET_CHARS = 400
+MAX_RESULTS_CAP = 10
 
 
-def search(query, max_results):
-    import requests
-
-    resp = requests.post(
-        "https://lite.duckduckgo.com/lite/",
-        data={"q": query},
-        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-        timeout=20,
-    )
-    resp.raise_for_status()
-    html = resp.text
-    titles = re.findall(
-        r'<a[^>]*href="([^"]+)"[^>]*class=["\']result-link["\'][^>]*>(.*?)</a>', html, re.S | re.I
-    ) or re.findall(
-        r'<a[^>]*class=["\']result-link["\'][^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.S | re.I
-    )
-    snippets = re.findall(r"class=['\"]result-snippet['\"][^>]*>(.*?)</td>", html, re.S | re.I)
-    results = []
-    for i, (href, title) in enumerate(titles):
-        if i >= max_results:
-            break
-        snippet = clean_html(snippets[i]) if i < len(snippets) else ""
-        results.append({"title": clean_html(title), "url": unwrap_url(href), "snippet": snippet})
-    return results
+def _text(node):
+    return node.get_text(" ", strip=True) if node else ""
 
 
-def fetch_page_text(url, max_chars=1500):
+def _trim(text):
+    return " ".join(text.split())[:SNIPPET_CHARS]
+
+
+def _flatten(value):
+    if isinstance(value, list):
+        return "".join(
+            part.get("value", "") if isinstance(part, dict) else str(part)
+            for part in value
+        )
+    return str(value or "")
+
+
+def search_rightdao(query, max_results):
     import requests
     from bs4 import BeautifulSoup
 
     resp = requests.get(
-        url,
-        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+        "https://rightdao.com/search",
+        params={"q": query},
+        headers=HEADERS,
         timeout=15,
     )
     resp.raise_for_status()
+    # rightdao serves text/html with no charset, so requests guesses
+    # ISO-8859-1 and mangles every non-ASCII character in a snippet
+    if not resp.encoding or resp.encoding.lower() == "iso-8859-1":
+        resp.encoding = resp.apparent_encoding or "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
+    results = []
+    for item in soup.select("div.item"):
+        link = item.find("a", href=True)
+        description = item.select_one("div.description")
+        if not link or not link["href"].startswith("http") or not description:
+            continue
+        results.append({
+            "title": _text(item.select_one("div.title")) or _text(link),
+            "url": _text(item.select_one("div.info span.url")) or link["href"],
+            "snippet": _trim(_text(description)),
+        })
+        if len(results) >= max_results:
+            break
+    return results
 
-    for tag in soup(["script", "style", "nav", "footer", "header", "aside",
-                     "form", "noscript", "iframe", "svg", "button",
-                     "noscript", "meta", "link"]):
-        tag.decompose()
 
-    for tag in soup.find_all(class_=re.compile(r"(sidebar|menu|nav|footer|header|cookie|banner|popup|modal|ad[-_])", re.I)):
-        tag.decompose()
+def search_mwmbl(query, max_results):
+    import requests
 
-    for tag in soup.find_all(id=re.compile(r"(sidebar|menu|nav|footer|header|cookie|banner|popup|modal|ad[-_])", re.I)):
-        tag.decompose()
-
-    main = (
-        soup.find("article")
-        or soup.find("main")
-        or soup.find(class_=re.compile(r"(content|post|entry|article|body|text)[-_]", re.I))
-        or soup.find("body")
+    resp = requests.get(
+        "https://api.mwmbl.org/api/v1/search/",
+        params={"s": query},
+        headers=HEADERS,
+        timeout=10,
     )
-    if main is None:
-        return ""
+    resp.raise_for_status()
+    results = []
+    for item in resp.json():
+        url = str(item.get("url") or "")
+        title = _flatten(item.get("title")).strip()
+        if not url.startswith("http") or not title:
+            continue
+        results.append({
+            "title": title,
+            "url": url,
+            "snippet": _trim(_flatten(item.get("extract"))),
+        })
+        if len(results) >= max_results:
+            break
+    return results
 
-    paragraphs = main.find_all("p")
-    if paragraphs:
-        text = " ".join(p.get_text(separator=" ", strip=True) for p in paragraphs)
-    else:
-        text = main.get_text(separator=" ", strip=True)
 
-    text = re.sub(r"\s+", " ", text).strip()
-    if len(text) > max_chars:
-        text = text[:max_chars].rsplit(" ", 1)[0] + "..."
-    return text
+def search(query, max_results):
+    failures = []
+    for name, backend in (("rightdao", search_rightdao), ("mwmbl", search_mwmbl)):
+        try:
+            results = backend(query, max_results)
+        except Exception as e:
+            failures.append(f"{name}: {e}")
+            continue
+        if results:
+            return results
+        failures.append(f"{name}: no results")
+    raise RuntimeError("; ".join(failures))
 
 
 def main():
     ns = build_parser(manifest_for(__file__)).parse_args()
-    if not ns.query:
-        emit(False, error="query is required")
+    max_results = max(1, min(ns.max or 1, MAX_RESULTS_CAP))
     try:
-        results = search(ns.query, ns.max)
+        results = search(ns.query, max_results)
     except Exception as e:
         emit(False, error=f"search failed: {e}")
+        return
     if not results:
-        emit(False, error="no results found")
-
-    top = results[0]
-    url = top["url"]
-
-    try:
-        page_text = fetch_page_text(url)
-    except Exception:
-        page_text = ""
-
-    if page_text:
-        emit(True, f"{page_text}\n\n(source: {url})")
-    else:
-        content = top["snippet"] or top["title"]
-        emit(True, f"{content}\n\n(source: {url})")
+        emit(False, error=f"no results found for {ns.query!r}")
+        return
+    emit(True, {"query": ns.query, "results": results})
 
 
 if __name__ == "__main__":
