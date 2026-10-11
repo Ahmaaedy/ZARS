@@ -132,6 +132,11 @@ def handle_slash(console, agent, text):
         console.print(f"[red]unknown command[/red] {cmd} -- try /help")
 
 
+def _is_online(mode):
+    """True for any cloud mode, including the deprecated 'online' alias."""
+    return str(mode or "offline").strip().lower() != "offline"
+
+
 def run_voice(config, registry, agent, console):
     """Start the offline voice pipeline. Any failure to bring it up (missing
     model, no mic, missing dependency) is reported and returns instead of
@@ -150,8 +155,8 @@ def run_voice(config, registry, agent, console):
         f"[dim]mode={config.zars_mode} | wake+vad: local | stt: {loop.stt_name} | "
         f"llm: {loop.llm_name} | tts: local (Kokoro)[/dim]"
     )
-    if str(getattr(config, "zars_mode", "offline")).lower() == "online":
-        console.print("[yellow]ONLINE: recorded audio and conversation text are sent to Groq.[/yellow]")
+    if _is_online(config.zars_mode):
+        console.print("[yellow]ONLINE: recorded audio and conversation text are sent to your cloud provider.[/yellow]")
     try:
         loop.run()
     except KeyboardInterrupt:
@@ -212,8 +217,8 @@ def main():
         border_style="cyan",
     ))
     console.print(f"[dim]mode={config.zars_mode} | llm: {llm_name}[/dim]")
-    if str(getattr(config, "zars_mode", "offline")).lower() == "online":
-        console.print("[yellow]ONLINE: your requests and any tool output are sent to Groq.[/yellow]")
+    if _is_online(config.zars_mode):
+        console.print("[yellow]ONLINE: your requests and any tool output are sent to your cloud provider.[/yellow]")
 
     interactive.start_reader()
 

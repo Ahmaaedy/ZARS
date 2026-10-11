@@ -60,6 +60,12 @@ DEFAULTS = {
     # max seconds to honour Retry-After on a 429 before failing over to the
     # local stack; 0 disables waiting entirely
     "groq_retry_after_max_s": 2.0,
+    # Gemini is the alternate reasoning provider (ZARS_MODE=gemini). STT still
+    # goes to Groq whisper in that mode.
+    "gemini_api_key": "",
+    "gemini_llm_model": "gemini-flash-lite-latest",
+    "gemini_timeout_seconds": 30.0,
+    "gemini_retry_after_max_s": 2.0,
     "online_fallback_to_local": True,
 }
 
@@ -73,12 +79,18 @@ ENV_KEYS = {
     "GROQ_TIMEOUT_SECONDS": "groq_timeout_seconds",
     "GROQ_RETRY_AFTER_MAX_S": "groq_retry_after_max_s",
     "ONLINE_FALLBACK_TO_LOCAL": "online_fallback_to_local",
+    "GEMINI_API_KEY": "gemini_api_key",
+    "GEMINI_LLM_MODEL": "gemini_llm_model",
+    "GEMINI_TIMEOUT_SECONDS": "gemini_timeout_seconds",
+    "GEMINI_RETRY_AFTER_MAX_S": "gemini_retry_after_max_s",
 }
 
 # env values coerced to the types DEFAULTS expects
 ENV_CASTS = {
     "groq_timeout_seconds": float,
     "groq_retry_after_max_s": float,
+    "gemini_timeout_seconds": float,
+    "gemini_retry_after_max_s": float,
     "online_fallback_to_local": lambda v: str(v).strip().lower() in ("1", "true", "yes", "on"),
 }
 

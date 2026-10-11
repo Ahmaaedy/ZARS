@@ -94,39 +94,47 @@ Contract: args via `--param value` CLI flags, one JSON line on stdout
 
 `ZARS_MODE` in `.env` (see `.env.example`) picks the backend:
 
-| Stage | `offline` (default) | `online` |
-|---|---|---|
-| Wake word | openWakeWord (local) | same |
-| VAD | Silero (local) | same |
-| STT | faster-whisper (local) | Groq Whisper API |
-| Reasoning | Ollama (local) | Groq chat API |
-| TTS | Kokoro (local) | same |
-| Router, tools, notes, memory | local | same |
+| Stage | `offline` (default) | `groq` | `gemini` |
+|---|---|---|---|
+| Wake word | openWakeWord (local) | same | same |
+| VAD | Silero (local) | same | same |
+| STT | faster-whisper (local) | Groq Whisper | Groq Whisper |
+| Reasoning | Ollama (local) | Groq chat | Gemini chat |
+| TTS | Kokoro (local) | same | same |
+| Router, tools, notes, memory | local | same | same |
 
-TTS is always on-device. Nothing streams while idle -- audio is only sent after
+TTS is always on-device. STT stays on Groq in **both** online modes -- Gemini is
+used for reasoning only. Nothing streams while idle: audio is only sent after
 the wake word fires and the VAD confirms speech.
+
+**Cross-cloud fallback.** In `groq` mode the reasoning chain is
+Groq -> Gemini -> local Ollama; in `gemini` mode it is Gemini -> Groq -> local
+Ollama. Either way the assistant keeps answering if one cloud is down, and
+falls back to fully local last. A cloud with no API key is skipped silently.
 
 ```powershell
 python main.py --voice                  # offline (default)
-$env:ZARS_MODE="online"; python main.py --voice   # online, this shell only
+$env:ZARS_MODE="gemini"; python main.py --voice   # one shell only
 ```
 
-`ZARS_MODE=online` without a `GROQ_API_KEY` logs an error and runs offline. An
-invalid value warns and falls back to offline. With
-`ONLINE_FALLBACK_TO_LOCAL=true`, a Groq failure (no network, 401, 429, 5xx) logs
-the reason and uses the local stack for that request; local models are only
-loaded when a fallback actually happens.
+`ZARS_MODE=online` is still accepted as a deprecated alias for `groq`. An
+unknown value, or a missing API key for the selected mode, logs a warning and
+runs offline. With `ONLINE_FALLBACK_TO_LOCAL=false` only the selected provider
+is used -- no cloud-to-cloud, no local.
 
 In online mode ZARS prints a notice at startup: recorded audio, the last 10
-conversation turns, and tool output are sent to Groq.
+conversation turns, and tool output are sent to your cloud provider.
 
 Test the providers without a microphone:
 
 ```
-python test_groq.py env       resolved mode and config (never prints the key)
-python test_groq.py stt       transcribe a generated sample wav
-python test_groq.py llm       stream one reply chunk by chunk
-python test_groq.py failures  bad key / no network / 429 / fallback-to-local
+python test_gemini.py models    what your Gemini key can actually reach
+python test_gemini.py env       resolved mode + config (never prints the key)
+python test_gemini.py llm       stream one reply as a tool pick
+python test_gemini.py failures  bad key / no network / fallback chain
+python test_groq.py stt         transcribe a generated sample wav
+python test_groq.py llm         stream a Groq reply chunk by chunk
+python test_groq.py failures    bad key / no network / 429 / fallback-to-local
 ```
 
 ## Configuration (`config.json`)

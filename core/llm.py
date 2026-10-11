@@ -17,11 +17,11 @@ class LLM:
         if self.provider == "ollama":
             from ollama import Client
             self.client = Client(host=config.host)
-        elif self.provider == "gemini":
-            from google import genai
-            self.client = genai.Client(api_key=config.api_key)
         else:
-            raise LLMError(f"unknown provider: {self.provider!r}")
+            raise LLMError(
+                f"unknown provider: {self.provider!r} "
+                "(core/llm.py serves Ollama only; use ZARS_MODE for Gemini/Groq)"
+            )
 
     def _registry_lines(self):
         lines = []
@@ -138,10 +138,11 @@ class LLM:
         try:
             if self.provider == "ollama":
                 content = self._pick_ollama(messages)
-            elif self.provider == "gemini":
-                content = self._pick_gemini(messages)
             else:
-                raise LLMError(f"unknown provider: {self.provider!r}")
+                raise LLMError(
+                    f"unknown provider: {self.provider!r} "
+                    "(core/llm.py serves Ollama only; use ZARS_MODE for Gemini/Groq)"
+                )
         except LLMError:
             raise
         except Exception as e:
@@ -159,32 +160,6 @@ class LLM:
             },
         )
         return response["message"]["content"]
-
-    def _pick_gemini(self, messages):
-        from google.genai import types
-
-        system_instruction = None
-        contents = []
-        for msg in messages:
-            if msg["role"] == "system" and system_instruction is None:
-                system_instruction = msg["content"]
-            else:
-                contents.append(types.Content(
-                    role="user" if msg["role"] != "assistant" else "model",
-                    parts=[types.Part.from_text(text=msg["content"])],
-                ))
-
-        response = self.client.models.generate_content(
-            model=self.config.model,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-                response_schema=self.tool_schema(),
-                temperature=self.config.temperature,
-            ),
-        )
-        return response.text
 
     def _parse_response(self, content):
         try:

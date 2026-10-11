@@ -11,6 +11,7 @@ which is exactly what the existing core/llm.py LLM.pick() returns, so
 core/agent.py and core/session.py need no changes. A prose chat() accessor is
 also provided, but the orchestrator's reasoning stage goes through pick().
 """
+import time
 
 
 class ProviderError(RuntimeError):
@@ -33,6 +34,26 @@ class ServerError(ProviderError):
 
 class OfflineError(ProviderError):
     """No network / DNS / connection refused."""
+
+
+def call_with_retry(fn, max_wait, sleep=time.sleep):
+    """Run fn(); on a 429 whose Retry-After fits the budget, wait once and
+    retry exactly once.
+
+    Lives here so every cloud provider shares one implementation. Deliberately
+    NOT a loop: a voice assistant should stall briefly rather than stall
+    indefinitely, and the caller still has a fallback available. A wait longer
+    than max_wait (or no Retry-After at all) fails straight through so fallback
+    happens immediately. max_wait <= 0 disables waiting.
+    """
+    try:
+        return fn()
+    except RateLimitError as e:
+        ra = getattr(e, "retry_after", None)
+        if max_wait <= 0 or ra is None or ra <= 0 or ra > max_wait:
+            raise
+        sleep(min(ra, max_wait))
+        return fn()  # single retry; a second failure propagates
 
 
 class STTProvider:

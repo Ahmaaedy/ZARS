@@ -42,8 +42,9 @@ numpy>=2.0.2            # audio buffers
 onnxruntime>=1.20.1     # wake word / VAD / Kokoro inference
 torch                   # silero_vad passes torch tensors
 
-# --- optional: online mode (ZARS_MODE=online) ---
-# Only used when .env sets ZARS_MODE=online and a GROQ_API_KEY is provided.
+# --- optional: online mode (ZARS_MODE=groq or gemini) ---
+# Only used when .env selects an online mode and a matching API key is present.
 # Offline mode never imports these.
-groq==1.0.0              # STT + chat for online mode
-python-dotenv>=1.0.0    # reads .env for ZARS_MODE / GROQ_* / fallback
+groq==1.0.0              # Groq whisper STT + chat reasoning
+google-genai==1.65.0     # Gemini chat reasoning (ZARS_MODE=gemini)
+python-dotenv>=1.0.0    # reads .env for ZARS_MODE / GROQ_* / GEMINI_* / fallback

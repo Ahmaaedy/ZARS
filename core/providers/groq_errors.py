@@ -6,11 +6,20 @@ decide fallback behaviour without importing the SDK.
 Also enforces the "do not retry in a loop" rule: callers get a Retry-After hint
 and are expected to try at most once.
 """
-import time
-
 import groq
 
-from .base import AuthError, OfflineError, ProviderError, RateLimitError, ServerError
+from .base import (
+    AuthError,
+    OfflineError,
+    ProviderError,
+    RateLimitError,
+    ServerError,
+    call_with_retry,
+)
+
+# Re-exported so existing `from .groq_errors import call_with_retry` callers
+# keep working now that it lives in base.py (provider-agnostic).
+__all__ = ["translate", "call_with_retry"]
 
 
 def _retry_after_seconds(err):
@@ -55,22 +64,3 @@ def translate(err, what="groq"):
             return ServerError(f"{what}: upstream server error ({status})")
         return ProviderError(f"{what}: request failed ({status})")
     return ProviderError(f"{what}: {type(err).__name__}: {err}")
-
-
-def call_with_retry(fn, max_wait, sleep=time.sleep):
-    """Run fn(); on a 429 whose Retry-After fits the budget, wait once and
-    retry exactly once.
-
-    Deliberately NOT a loop: a voice assistant should stall briefly rather than
-    stall indefinitely, and the caller still has local fallback available. A
-    wait longer than max_wait (or no Retry-After at all) fails straight through
-    so fallback happens immediately. max_wait <= 0 disables waiting.
-    """
-    try:
-        return fn()
-    except RateLimitError as e:
-        ra = getattr(e, "retry_after", None)
-        if max_wait <= 0 or ra is None or ra <= 0 or ra > max_wait:
-            raise
-        sleep(min(ra, max_wait))
-        return fn()  # single retry; a second failure propagates
