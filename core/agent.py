@@ -33,7 +33,13 @@ class Agent:
         self.router = Router(registry, self.macros)
         self.llm = LLM(self.config, registry)
 
-    def handle(self, text):
+    def handle(self, text, llm=None):
+        """Route one request.
+
+        `llm` lets the entry point inject a provider (local or Groq) so the CLI
+        honours ZARS_MODE too, mirroring handle_voice(). Defaults to None, which
+        keeps the configured self.llm and is byte-identical to before.
+        """
         entry, args = self.router.match(text)
         if entry:
             self.console.print(f"[bold blue]->[/bold blue] [bold]{entry.id}[/bold]({self._args_str(args)}) [dim](core)[/dim]")
@@ -47,7 +53,7 @@ class Agent:
                 return
         if self._handle_macro_intent(text):
             return
-        self._llm_loop(text)
+        self._llm_loop(text, llm=llm)
 
     def handle_voice(self, text, llm=None):
         """Same routing as handle(), but returns the final answer as a string

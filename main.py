@@ -12,6 +12,7 @@ from core.config import Config
 from core.executor import run_shell
 from core.macros import MacroManager, print_macros, handle_macro_add
 from core.registry import load_registry
+from core.providers.factory import build_llm
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -190,12 +191,17 @@ def main():
     if args.voice:
         return run_voice(config, registry, agent, console)
 
+    # CLI reasoning honours ZARS_MODE too: build the LLM provider once and pass
+    # it to handle(). Offline returns the same OllamaLLM wrapper as before.
+    llm_provider, llm_note = build_llm(config, agent, log=console.print)
+    llm_name = getattr(llm_provider, "name", "llm")
+
     if args.one_shot:
         request = args.one_shot.strip()
         if request.startswith("/"):
             handle_slash(console, agent, request)
         else:
-            agent.handle(request)
+            agent.handle(request, llm=llm_provider)
         return
 
     console.print(Panel.fit(
@@ -205,6 +211,9 @@ def main():
         f"[dim]/help for commands[/dim]",
         border_style="cyan",
     ))
+    console.print(f"[dim]mode={config.zars_mode} | llm: {llm_name}[/dim]")
+    if str(getattr(config, "zars_mode", "offline")).lower() == "online":
+        console.print("[yellow]ONLINE: your requests and any tool output are sent to Groq.[/yellow]")
 
     interactive.start_reader()
 
@@ -231,7 +240,7 @@ def main():
                 return
             continue
         try:
-            agent.handle(text)
+            agent.handle(text, llm=llm_provider)
         except KeyboardInterrupt:
             console.print("\n[yellow]interrupted[/yellow]")
 

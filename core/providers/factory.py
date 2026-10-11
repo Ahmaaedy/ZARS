@@ -89,6 +89,47 @@ def _truthy(value, default=True):
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _offline_llm(agent):
+    from .llm_providers import OllamaLLM
+    return OllamaLLM(agent.llm)
+
+
+def build_llm(config, agent, log=None):
+    """Return (llm_provider, note) for the current mode.
+
+    Split out of build_providers so the CLI can pick up Groq reasoning without
+    constructing an unused STT provider. Single source of truth for mode
+    resolution, fallback wiring, and retry settings.
+    """
+    log = log or (lambda m: None)
+    mode, warning = resolve_mode(config)
+    if warning:
+        log(warning)
+
+    if mode == "offline":
+        return _offline_llm(agent), "offline: local ollama"
+
+    api_key = getattr(config, "groq_api_key", "") or ""
+    if not api_key.strip():
+        log("ZARS_MODE=online but GROQ_API_KEY is empty -- running OFFLINE instead.")
+        return _offline_llm(agent), "offline (online requested, no API key)"
+
+    from .llm_providers import GroqLLM
+
+    timeout = float(getattr(config, "groq_timeout_seconds", 15) or 15)
+    retry_max = float(getattr(config, "groq_retry_after_max_s", 2.0) or 0.0)
+    llm_model = getattr(config, "groq_llm_model", "")
+
+    online_llm = GroqLLM(agent.llm, api_key, llm_model, timeout=timeout,
+                         retry_after_max_s=retry_max)
+    local_llm = LazyLocal(lambda: _local_llm(agent))
+
+    if _truthy(getattr(config, "online_fallback_to_local", True)):
+        return FallbackLLM(online_llm, local_llm, log=log), \
+            "online: groq chat (falls back to local)"
+    return online_llm, "online: groq chat (no fallback)"
+
+
 def build_providers(config, registry, agent, log=None):
     """Return (stt_provider, llm_provider, mode_note).
 
@@ -96,47 +137,28 @@ def build_providers(config, registry, agent, log=None):
     second one, so system_prompt() and _parse_response() stay consistent.
     """
     log = log or (lambda m: None)
-    mode, warning = resolve_mode(config)
-    if warning:
-        log(warning)
-    if mode == "offline":
-        from .llm_providers import OllamaLLM
-        from .local_stt import build_local_stt
-        return build_local_stt(config), OllamaLLM(agent.llm), "offline: local whisper + local ollama"
+    llm, note = build_llm(config, agent, log=log)
 
+    mode, _warning = resolve_mode(config)
     api_key = getattr(config, "groq_api_key", "") or ""
-    if not api_key.strip():
-        log("ZARS_MODE=online but GROQ_API_KEY is empty -- running OFFLINE instead.")
-        from .llm_providers import OllamaLLM
+
+    if mode != "online" or not api_key.strip():
         from .local_stt import build_local_stt
-        return build_local_stt(config), OllamaLLM(agent.llm), "offline (online requested, no API key)"
+        return build_local_stt(config), llm, note
 
     from .groq_stt import GroqSTT
-    from .llm_providers import GroqLLM
-
     timeout = float(getattr(config, "groq_timeout_seconds", 15) or 15)
     retry_max = float(getattr(config, "groq_retry_after_max_s", 2.0) or 0.0)
-    stt_model = getattr(config, "groq_stt_model", "")
-    llm_model = getattr(config, "groq_llm_model", "")
-    lang = getattr(config, "groq_stt_language", "en")
-
-    online_stt = GroqSTT(api_key, stt_model, timeout=timeout, language=lang,
+    online_stt = GroqSTT(api_key, getattr(config, "groq_stt_model", ""),
+                         timeout=timeout,
+                         language=getattr(config, "groq_stt_language", "en"),
                          retry_after_max_s=retry_max)
-    online_llm = GroqLLM(agent.llm, api_key, llm_model, timeout=timeout,
-                         retry_after_max_s=retry_max)
-
-    # Lazy local providers for fallback -- not built until actually needed.
     local_stt = LazyLocal(lambda: _local_stt(config))
-    local_llm = LazyLocal(lambda: _local_llm(agent))
 
     if _truthy(getattr(config, "online_fallback_to_local", True)):
-        stt = FallbackSTT(online_stt, local_stt, log=log)
-        llm = FallbackLLM(online_llm, local_llm, log=log)
-        note = "online: groq whisper + groq chat (falls back to local)"
-    else:
-        stt, llm = online_stt, online_llm
-        note = "online: groq whisper + groq chat (no fallback)"
-    return stt, llm, note
+        return FallbackSTT(online_stt, local_stt, log=log), llm, \
+            "online: groq whisper + groq chat (falls back to local)"
+    return online_stt, llm, "online: groq whisper + groq chat (no fallback)"
 
 
 def _local_stt(config):
