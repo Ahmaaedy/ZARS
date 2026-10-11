@@ -6,6 +6,8 @@ decide fallback behaviour without importing the SDK.
 Also enforces the "do not retry in a loop" rule: callers get a Retry-After hint
 and are expected to try at most once.
 """
+import time
+
 import groq
 
 from .base import AuthError, OfflineError, ProviderError, RateLimitError, ServerError
@@ -36,7 +38,9 @@ def translate(err, what="groq"):
     if isinstance(err, groq.RateLimitError):
         ra = _retry_after_seconds(err)
         hint = f"; Retry-After={ra:.0f}s" if ra else ""
-        return RateLimitError(f"{what}: rate limited (429){hint}")
+        target = RateLimitError(f"{what}: rate limited (429){hint}")
+        target.retry_after = ra  # read by call_with_retry
+        return target
     if isinstance(err, groq.PermissionDeniedError):
         return AuthError(f"{what}: permission denied (403) -- key lacks access")
     if isinstance(err, (groq.InternalServerError,)):
@@ -53,10 +57,20 @@ def translate(err, what="groq"):
     return ProviderError(f"{what}: {type(err).__name__}: {err}")
 
 
-def attach_retry_after(target, err):
-    """Copy the Retry-After hint onto a RateLimitError."""
-    if isinstance(target, RateLimitError):
-        ra = _retry_after_seconds(err)
-        if ra is not None:
-            target.retry_after = ra
-    return target
+def call_with_retry(fn, max_wait, sleep=time.sleep):
+    """Run fn(); on a 429 whose Retry-After fits the budget, wait once and
+    retry exactly once.
+
+    Deliberately NOT a loop: a voice assistant should stall briefly rather than
+    stall indefinitely, and the caller still has local fallback available. A
+    wait longer than max_wait (or no Retry-After at all) fails straight through
+    so fallback happens immediately. max_wait <= 0 disables waiting.
+    """
+    try:
+        return fn()
+    except RateLimitError as e:
+        ra = getattr(e, "retry_after", None)
+        if max_wait <= 0 or ra is None or ra <= 0 or ra > max_wait:
+            raise
+        sleep(min(ra, max_wait))
+        return fn()  # single retry; a second failure propagates

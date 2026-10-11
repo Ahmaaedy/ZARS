@@ -75,6 +75,52 @@ class LLM:
             "Respond with JSON only."
         )
 
+    def _registry_lines_compact(self):
+        """Trimmed tool list: id(param_names): desc.
+
+        Drops triggers and examples, which cost ~2000 chars across 24 entries.
+        Safe for providers that constrain output natively (Groq sends the full
+        schema as a function definition), since the prompt prose was only ever a
+        belt-and-braces duplicate of that constraint.
+        """
+        lines = []
+        for entry in self.registry.entries.values():
+            params = ",".join(p["name"] for p in entry.params)
+            lines.append(f"- {entry.id}({params}): {entry.desc}")
+        return "\n".join(lines)
+
+    def system_prompt_compact(self):
+        """Same prompt as system_prompt() with the tool list compacted.
+
+        Used only by the Groq provider to stay inside the TPM rate limit.
+        Ollama keeps the full prompt because its constrained decoding still
+        relies on that prose to steer JSON tool-picks.
+        """
+        return (
+            "You are ZARS, an on-device terminal assistant for Windows (PowerShell).\n"
+            f"Current date and time: {datetime.now().strftime('%A, %B %d, %Y %I:%M %p')}\n"
+            "You complete the user's request by choosing ONE action per turn, as JSON.\n\n"
+            "Available tools:\n"
+            f"{self._registry_lines_compact()}\n\n"
+            "Special tools:\n"
+            '- shell — run any PowerShell command when no tool fits; set "command" to the command\n'
+            '- done — finish; "response" is the final answer for the user\n'
+            '- ask — ask the user a clarifying question; "response" is the question\n\n'
+            "Rules:\n"
+            "- Prefer registry tools over shell. Never invent tool ids.\n"
+            "- args keys must exactly match the tool's params.\n"
+            '- When tool is "shell", the PowerShell command MUST go in "command" (never in response).\n'
+            '- When tool is "done" or "ask", put your text in "response".\n'
+            "- One action per turn; you will receive its result, then choose again.\n"
+            "- Keep shell commands simple and non-destructive.\n"
+            "- For questions you can answer directly (math, facts, explanations), use done immediately.\n"
+            "- Never use tools for questions you can answer yourself.\n"
+            "- For casual greetings or conversation, use done to respond naturally and briefly.\n"
+            "- If the user wants to create, make, build, or generate a new skill, use the 'create_skill' tool.\n"
+            "- If no tool fits, use done to explain what tools are available. Never guess or hallucinate shell commands.\n\n"
+            "Respond with JSON only."
+        )
+
     def tool_schema(self):
         return {
             "type": "object",

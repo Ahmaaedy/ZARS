@@ -4,7 +4,7 @@
   "host": "http://localhost:11434",
   "api_key": "",
   "temperature": 1,
-  "step_budget": 100,
+  "step_budget": 8,
   "output_head": 2000,
   "output_tail": 1200,
   "shell_timeout": 30,

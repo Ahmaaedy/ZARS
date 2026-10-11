@@ -39,14 +39,22 @@ class OllamaLLM(_SharedLLM):
 class GroqLLM(_SharedLLM):
     name = "groq chat (online)"
 
-    def __init__(self, llm, api_key, model, timeout=15.0, client=None):
+    def __init__(self, llm, api_key, model, timeout=15.0, client=None,
+                 retry_after_max_s=2.0):
         super().__init__(llm)  # sets self._llm (system prompt + response parser)
         if not model:
             raise ProviderError("GROQ_LLM_MODEL is not set")
         self.model = model
         self.timeout = float(timeout)
+        self.retry_after_max_s = float(retry_after_max_s)
         self._api_key = api_key
         self._client = client
+
+    def system_prompt(self):
+        """Compact prompt: the tool schema is already sent as a function
+        definition, so the long trigger/example prose is redundant and would
+        burn the 8k TPM budget on every call."""
+        return self._llm.system_prompt_compact()
 
     def _get_client(self):
         if self._client is None:
@@ -85,21 +93,24 @@ class GroqLLM(_SharedLLM):
             },
         }]
 
+    def _with_retry(self, fn):
+        from .groq_errors import call_with_retry
+        return call_with_retry(fn, self.retry_after_max_s)
+
     def _stream(self, messages):
         """Stream once. Returns (content_text, tool_args_json, tool_name).
 
         Tries native tool calling first. If the model produces a tool call the
-        provider cannot validate, falls back ONCE to plain JSON mode -- a single
-        bounded retry, never a loop. Auth/rate-limit/offline errors propagate
-        untouched so the factory can decide on fallback.
+        provider cannot validate, falls back ONCE to plain JSON mode. Each path
+        gets one bounded Retry-After wait; auth/rate-limit/offline errors that
+        outlast it propagate so the factory can decide on local fallback.
         """
         try:
-            return self._stream_tools(messages)
+            return self._with_retry(lambda: self._stream_tools(messages))
         except ProviderError as e:
             if "tool call" not in str(e).lower():
                 raise
-            content, _args, _name = self._stream_json(messages)
-            return content, "", None
+            return self._with_retry(lambda: self._stream_json(messages))
 
     def _stream_json(self, messages):
         from .groq_errors import translate

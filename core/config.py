@@ -57,6 +57,9 @@ DEFAULTS = {
     "groq_llm_model": "openai/gpt-oss-20b",
     "groq_stt_language": "en",
     "groq_timeout_seconds": 15.0,
+    # max seconds to honour Retry-After on a 429 before failing over to the
+    # local stack; 0 disables waiting entirely
+    "groq_retry_after_max_s": 2.0,
     "online_fallback_to_local": True,
 }
 
@@ -68,12 +71,14 @@ ENV_KEYS = {
     "GROQ_LLM_MODEL": "groq_llm_model",
     "GROQ_STT_LANGUAGE": "groq_stt_language",
     "GROQ_TIMEOUT_SECONDS": "groq_timeout_seconds",
+    "GROQ_RETRY_AFTER_MAX_S": "groq_retry_after_max_s",
     "ONLINE_FALLBACK_TO_LOCAL": "online_fallback_to_local",
 }
 
 # env values coerced to the types DEFAULTS expects
 ENV_CASTS = {
     "groq_timeout_seconds": float,
+    "groq_retry_after_max_s": float,
     "online_fallback_to_local": lambda v: str(v).strip().lower() in ("1", "true", "yes", "on"),
 }
 

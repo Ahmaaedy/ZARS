@@ -115,12 +115,15 @@ def build_providers(config, registry, agent, log=None):
     from .llm_providers import GroqLLM
 
     timeout = float(getattr(config, "groq_timeout_seconds", 15) or 15)
+    retry_max = float(getattr(config, "groq_retry_after_max_s", 2.0) or 0.0)
     stt_model = getattr(config, "groq_stt_model", "")
     llm_model = getattr(config, "groq_llm_model", "")
     lang = getattr(config, "groq_stt_language", "en")
 
-    online_stt = GroqSTT(api_key, stt_model, timeout=timeout, language=lang)
-    online_llm = GroqLLM(agent.llm, api_key, llm_model, timeout=timeout)
+    online_stt = GroqSTT(api_key, stt_model, timeout=timeout, language=lang,
+                         retry_after_max_s=retry_max)
+    online_llm = GroqLLM(agent.llm, api_key, llm_model, timeout=timeout,
+                         retry_after_max_s=retry_max)
 
     # Lazy local providers for fallback -- not built until actually needed.
     local_stt = LazyLocal(lambda: _local_stt(config))
