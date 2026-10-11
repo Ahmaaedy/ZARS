@@ -58,19 +58,28 @@ def test_models(cfg):
     for m in getattr(listing, "models", []) or []:
         mid = getattr(m, "name", "") or ""
         ids.append(mid)
-    print(f"{len(ids)} models visible to this key:")
-    for mid in sorted(ids):
-        print("  ", mid)
+    if ids:
+        print(f"{len(ids)} models visible to this key:")
+        for mid in sorted(ids):
+            print("  ", mid)
+    else:
+        print("models.list() returned nothing (some keys/tiers cannot enumerate).")
+        print("Falling back to a live probe of the configured model...")
     print()
     print("configured GEMINI_LLM_MODEL:", cfg.gemini_llm_model)
-    flash_lite = [i for i in ids if "flash-lite" in i.lower()]
-    if flash_lite:
-        print("flash-lite candidates:")
-        for i in sorted(flash_lite):
-            marker = "  <- configured" if cfg.gemini_llm_model in i else ""
-            print("  ", i, marker)
-    else:
-        print("no flash-lite model visible -- check access tier")
+
+    # Probe: the listing can be empty while the model still works, so always
+    # confirm the configured id by actually calling it.
+    try:
+        client.models.generate_content(
+            model=cfg.gemini_llm_model, contents="Reply with the single word: ok")
+        print("probe: %s -> REACHABLE" % cfg.gemini_llm_model)
+    except Exception as e:
+        print("probe: %s -> FAILED: %s" % (cfg.gemini_llm_model, str(e)[:120]))
+        print("       try another id; see https://ai.google.dev/gemini-api/docs/models")
+        return
+    if not ids:
+        print("(model works; you just cannot enumerate the catalogue with this key)")
 
 
 def test_env(cfg):

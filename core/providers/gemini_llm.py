@@ -98,17 +98,21 @@ class GeminiLLM(LLMProvider):
             stream = client.models.generate_content_stream(
                 model=self.model, contents=contents, config=config)
             for chunk in stream:
-                # text (content path)
+                # Check function calls FIRST: reading .text on a chunk that
+                # carries a function_call makes the SDK emit a warning on every
+                # call, since it cannot render a non-text part as text.
+                calls = getattr(chunk, "function_calls", None) or []
+                if calls:
+                    for fc in calls:
+                        args = getattr(fc, "args", None)
+                        if args:
+                            arg_frags.append(json.dumps(dict(args)))
+                        elif getattr(fc, "partial_args", None):
+                            arg_frags.append(json.dumps(dict(fc.partial_args)))
+                    continue
                 text = getattr(chunk, "text", None)
                 if text:
                     text_parts.append(text)
-                # native function call path
-                for fc in (getattr(chunk, "function_calls", None) or []):
-                    args = getattr(fc, "args", None)
-                    if args:
-                        arg_frags.append(json.dumps(dict(args)))
-                    elif getattr(fc, "partial_args", None):
-                        arg_frags.append(json.dumps(dict(fc.partial_args)))
         except Exception as e:
             raise translate(e, "gemini") from e
         return "".join(text_parts), "".join(arg_frags)
