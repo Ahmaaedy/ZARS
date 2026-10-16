@@ -11,6 +11,7 @@ from core.agent import Agent
 from core.config import Config
 from core.executor import run_shell
 from core.macros import MacroManager, print_macros, handle_macro_add
+from core.ollama_serve import ensure_serving
 from core.registry import load_registry
 from core.providers.factory import build_llm
 
@@ -211,6 +212,14 @@ def main():
     agent = Agent(config, registry, console,
                   dry_run=args.dry_run, no_confirm=args.no_confirm, debug=args.debug,
                   macro_manager=macros)
+
+    # Offline mode reasons on Ollama, so get it listening before the first
+    # request rather than failing on it. Online modes keep Ollama only as the
+    # last-resort fallback, so there the same check runs lazily if the fallback
+    # is ever reached. Either way the server is stopped on exit, but only if we
+    # were the ones who started it.
+    if not _is_online(config.zars_mode):
+        ensure_serving(config, log=console.print)
 
     if args.voice:
         return run_voice(config, registry, agent, console)

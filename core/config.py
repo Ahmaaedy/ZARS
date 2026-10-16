@@ -4,9 +4,14 @@ import os
 from pathlib import Path
 
 DEFAULTS = {
-    "provider": "ollama",
-    "model": "qwen2.5:3b-instruct",
-    "host": "http://localhost:11434",
+"provider": "ollama",
+"model": "qwen2.5:3b-instruct",
+"host": "http://localhost:11434",
+# Start `ollama serve` ourselves when nothing is answering, so a cold machine
+# does not fail every request. Only ever applies to a loopback host, and only
+# ever stops a server it started.
+"ollama_autostart": True,
+"ollama_autostart_wait_s": 30.0,
     "api_key": "",
     "temperature": 0.1,
     "step_budget": 4,
@@ -112,6 +117,9 @@ ENV_KEYS = {
     "ZARS_ORB_CAPTION_WIDTH": "voice_orb_caption_width",
     "ZARS_ORB_CAPTION_MAX_LINES": "voice_orb_caption_max_lines",
     "ZARS_ORB_CAPTION_FADE_MS": "voice_orb_caption_fade_ms",
+    # --- ollama server autostart ---
+    "ZARS_OLLAMA_AUTOSTART": "ollama_autostart",
+    "ZARS_OLLAMA_AUTOSTART_WAIT_S": "ollama_autostart_wait_s",
     # --- voice sleep/wake policy (see DEFAULTS) ---
     "ZARS_VOICE_ALWAYS_ASLEEP": "voice_always_asleep",
     "ZARS_VOICE_SLEEP_AFTER_ANSWER_S": "voice_sleep_after_answer_s",
@@ -134,6 +142,9 @@ ENV_CASTS = {
     "voice_orb_caption_width": int,
     "voice_orb_caption_max_lines": int,
     "voice_orb_caption_fade_ms": int,
+    # --- ollama server autostart ---
+    "ollama_autostart": lambda v: str(v).strip().lower() in ("1", "true", "yes", "on"),
+    "ollama_autostart_wait_s": float,
     # --- voice sleep/wake policy ---
     "voice_always_asleep": lambda v: str(v).strip().lower() in ("1", "true", "yes", "on"),
     "voice_sleep_after_answer_s": float,

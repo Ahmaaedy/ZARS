@@ -2,6 +2,8 @@
   "provider": "ollama",
   "model": "ZARS",
   "host": "http://localhost:11434",
+  "ollama_autostart": true,
+  "ollama_autostart_wait_s": 30.0,
   "api_key": "",
   "temperature": 1,
   "step_budget": 8,

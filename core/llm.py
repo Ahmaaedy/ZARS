@@ -9,10 +9,11 @@ class LLMError(Exception):
 
 
 class LLM:
-    def __init__(self, config, registry):
+    def __init__(self, config, registry, log=None):
         self.config = config
         self.registry = registry
         self.provider = getattr(config, "provider", "ollama")
+        self._log = log
 
         if self.provider == "ollama":
             from ollama import Client
@@ -22,6 +23,10 @@ class LLM:
                 f"unknown provider: {self.provider!r} "
                 "(core/llm.py serves Ollama only; use ZARS_MODE for Gemini/Groq)"
             )
+
+    def _autostart(self):
+        from .ollama_serve import ensure_serving
+        ensure_serving(self.config, log=self._log)
 
     def _registry_lines(self):
         lines = []
@@ -150,6 +155,34 @@ class LLM:
         return self._parse_response(content)
 
     def _pick_ollama(self, messages):
+        # Hooked here rather than in the provider layer because agent.py falls
+        # back to this object directly whenever no provider is injected
+        # (`llm = llm or self.llm`), so this is the one place every Ollama call
+        # passes through.
+        self._autostart()
+        try:
+            return self._chat_ollama(messages)
+        except Exception as first:
+            from .ollama_serve import ensure_serving, server_reachable, RECOVERY_WAIT_S
+            if server_reachable(self.config):
+                # The server is up, so this is a different failure -- a missing
+                # model, a bad tool pick. Retrying would only cost a round trip.
+                raise
+            # It is gone. Bring it back with a longer budget than start-up:
+            # restarting a server that had a model loaded takes measurably
+            # longer than a cold one. force=True because the success cache may
+            # still vouch for a server that has since died.
+            budget = max(float(getattr(self.config, "ollama_autostart_wait_s", 30.0)),
+                         RECOVERY_WAIT_S)
+            if not ensure_serving(self.config, log=self._log, wait_s=budget,
+                                  force=True):
+                raise LLMError(
+                    f"ollama stopped answering and could not be restarted "
+                    f"(original error: {first})"
+                ) from first
+            return self._chat_ollama(messages)
+
+    def _chat_ollama(self, messages):
         response = self.client.chat(
             model=self.config.model,
             messages=messages,

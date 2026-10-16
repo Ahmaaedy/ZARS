@@ -23,7 +23,7 @@ class Agent:
         self.debug = debug
         self.macros = macro_manager
         self.router = Router(registry, macro_manager)
-        self.llm = LLM(config, registry)
+        self.llm = LLM(config, registry, log=console.print)
         self.memory = ConversationMemory(config)
         self.longterm = LongTermMemory(config)
         self._confirm_rejections = 0
@@ -34,7 +34,7 @@ class Agent:
     def reload(self, registry):
         self.registry = registry
         self.router = Router(registry, self.macros)
-        self.llm = LLM(self.config, registry)
+        self.llm = LLM(self.config, registry, log=self.console.print)
 
     def handle(self, text, llm=None):
         """Route one request.
