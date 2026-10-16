@@ -1,21 +1,7 @@
-import ctypes
 import re
 import threading
 import time
 from pathlib import Path
-
-
-def set_volume(config, level):
-    try:
-        level = int(float(level))
-    except (TypeError, ValueError):
-        return False, f"invalid level: {level!r}"
-    level = max(0, min(100, level))
-    if not hasattr(ctypes, "windll"):
-        return False, "only supported on Windows"
-    v = int(65535 * level / 100)
-    ctypes.windll.winmm.waveOutSetVolume(0, v | (v << 16))
-    return True, f"volume set to {level}%"
 
 
 def write_note(config, content):
@@ -95,7 +81,6 @@ def set_timer(config, duration):
 
 
 BUILTINS = {
-    "set_volume": set_volume,
     "write_note": write_note,
     "search_notes": search_notes,
     "set_timer": set_timer,

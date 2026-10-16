@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core.safety import check_blocked
+from core.safety import check_blocked, check_confirm
 from core.skillgen import _validate_manifest
 
 passed = 0
@@ -46,9 +46,12 @@ test("reg import blocked", check_blocked("reg import backup.reg")[0])
 test("reg restore blocked", check_blocked("reg restore HKLM\\SOFTWARE\\Test backup.reg")[0])
 
 # Power operations
-test("shutdown blocked", check_blocked("shutdown /s /t 0")[0])
-test("restart-computer blocked", check_blocked("restart-computer")[0])
-test("stop-computer blocked", check_blocked("stop-computer")[0])
+# Power is a confirmation, not a denial: the blocklist lets it through and the
+# confirm list stops for a y/n, so the user can actually ask for a restart.
+test("shutdown not blocked", not check_blocked("shutdown /s /t 0")[0])
+test("shutdown needs confirm", check_confirm("shutdown /s /t 0")[0])
+test("restart-computer needs confirm", check_confirm("restart-computer")[0])
+test("stop-computer needs confirm", check_confirm("stop-computer")[0])
 
 # Service operations
 test("stop-service blocked", check_blocked("stop-service Spooler")[0])
@@ -77,8 +80,34 @@ test("Remove-Item (no -Recurse) allowed", not check_blocked("Remove-Item C:\\tes
 test("Get-Service allowed", not check_blocked("Get-Service")[0])
 test("Get-WmiObject allowed", not check_blocked("Get-WmiObject Win32_OperatingSystem")[0])
 
-# ========== 6C: Manifest Validation Safety ==========
-print("\n=== 6C: Manifest Validation Safety ===")
+# ========== 6C: Confirmation List ==========
+print("\n=== 6C: Confirmation List ===")
+
+# Power, however it was phrased
+test("shutdown /s /t 60 needs confirm", check_confirm("shutdown /s /t 60")[0])
+test("shutdown /r /t 0 needs confirm", check_confirm("shutdown /r /t 0")[0])
+test("Shutdown /S mixed case needs confirm", check_confirm("Shutdown /S")[0])
+test("shutdown /a (cancel) needs confirm", check_confirm("shutdown /a")[0])
+test("Restart-Computer -Force needs confirm", check_confirm("Restart-Computer -Force")[0])
+test("LockWorkStation needs confirm", check_confirm("rundll32 user32.dll,LockWorkStation")[0])
+test("SetSuspendState needs confirm", check_confirm("Add-Type -M SetSuspendState")[0])
+
+# The two skills whose danger is in what they do, not in their arguments
+test("power_control needs confirm", check_confirm("python skills/power_control/skill.py --action restart", "power_control")[0])
+test("close_non_background_apps needs confirm", check_confirm("python skills/cleanup/skill.py", "close_non_background_apps")[0])
+test("close_non_background_apps reason mentions apps", "app" in (check_confirm("", "close_non_background_apps")[1] or ""))
+
+# Everything else runs without asking
+test("Get-Date needs no confirm", not check_confirm("Get-Date")[0])
+test("Stop-Process needs no confirm", not check_confirm('Stop-Process -Name "chrome" -Force')[0])
+test("wifi toggle needs no confirm", not check_confirm('netsh interface set interface "Wi-Fi" off')[0])
+test("telegram send needs no confirm", not check_confirm("python skills/notify_send/skill.py --message hi", "notify_send")[0])
+test("unknown entry id needs no confirm", not check_confirm("python skills/whatever/skill.py", "whatever")[0])
+test("empty command needs no confirm", not check_confirm("")[0])
+test("blocked command is not merely confirm-listed", not check_confirm("Remove-Item -Recurse C:\\temp")[0])
+
+# ========== 6D: Manifest Validation Safety ==========
+print("\n=== 6D: Manifest Validation Safety ===")
 
 # Test: dangerous handler type
 manifest = {"id": "test", "desc": "test", "handler": {"type": "invalid"}}
@@ -104,8 +133,8 @@ manifest = {"id": "test", "desc": "test", "risk": "confirm"}
 errors_list = _validate_manifest(manifest)
 test("confirm risk value accepted", not any("risk" in e for e in errors_list))
 
-# ========== 6D: Edge Cases ==========
-print("\n=== 6D: Edge Cases ===")
+# ========== 6E: Edge Cases ==========
+print("\n=== 6E: Edge Cases ===")
 
 # Test: empty command
 blocked, reason = check_blocked("")

@@ -1,0 +1,23 @@
+import sys
+import subprocess
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from zars_sdk import build_parser, emit, manifest_for
+
+def main():
+    ns = build_parser(manifest_for(__file__)).parse_args()
+    try:
+        track_id = ns.url.split('/track/')[1].split('?')[0]
+        ps_cmd = f'Start-Process "spotify:track:{track_id}"'
+        result = subprocess.run(
+            ["powershell", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        emit(True, result.stdout.strip())
+    except Exception as e:
+        emit(False, str(e))
+
+if __name__ == "__main__":
+    main()

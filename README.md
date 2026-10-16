@@ -47,7 +47,7 @@ input -> Router
 | id | handler | risk |
 |---|---|---|
 | open_app / close_app / open_url | PowerShell | safe / confirm / safe |
-| set_volume / write_note / search_notes | Python builtins | safe |
+| write_note / search_notes | Python builtins | safe |
 | toggle_wifi | PowerShell | confirm |
 | web_search | skill | safe |
 | take_screenshot | skill | safe |

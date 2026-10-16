@@ -1,0 +1,37 @@
+{
+  "id": "test_subtle_weather",
+  "desc": "Provides current weather information for a given location.",
+  "params": [
+    {
+      "name": "location",
+      "type": "string",
+      "required": true,
+      "desc": "City name to retrieve weather for."
+    },
+    {
+      "name": "units",
+      "type": "string",
+      "required": false,
+      "desc": "Preferred temperature units (metric or imperial)."
+    }
+  ],
+  "keywords": [
+    "weather",
+    "temperature",
+    "forecast",
+    "conditions",
+    "rain",
+    "sunny",
+    "snow",
+    "humidity"
+  ],
+  "examples": [
+    "/weather London",
+    "/weather New York --units imperial",
+    "/weather Tokyo"
+  ],
+  "risk": "safe",
+  "handler": {
+    "type": "skill"
+  }
+}

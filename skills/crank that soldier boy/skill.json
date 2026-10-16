@@ -1,0 +1,28 @@
+{
+  "id": "crank that soldier boy",
+  "desc": "Plays the specified Spotify track.",
+  "params": [
+    {
+      "name": "url",
+      "type": "string",
+      "required": true,
+      "desc": "Spotify track URL to play."
+    }
+  ],
+  "keywords": [
+    "spotify",
+    "play",
+    "music",
+    "track",
+    "crank that",
+    "soulja boy"
+  ],
+  "examples": [
+    "/zars skill crankthatsoldierboy --url https://open.spotify.com/track/66TRwr5uJwPt15mfFkzhbi?si=7f0d705d1a6c44d9",
+    "play spotify track https://open.spotify.com/track/66TRwr5uJwPt15mfFkzhbi?si=7f0d705d1a6c44d9"
+  ],
+  "risk": "safe",
+  "handler": {
+    "type": "skill"
+  }
+}

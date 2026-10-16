@@ -5,5 +5,5 @@
   "keywords": ["cleanup", "close all apps", "terminate all", "quit all"],
   "examples": ["close all non-background apps"],
   "handler": {"timeout": 30},
-  "risk": "safe"
+  "risk": "confirm"
 }

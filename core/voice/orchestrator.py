@@ -15,6 +15,7 @@ Design notes:
     memory/recent.json is never wiped by this.
   * Every failure path logs and returns to IDLE; nothing here raises out.
 """
+import re
 import time
 
 from ..providers.base import ProviderError
@@ -30,13 +31,27 @@ TRANSCRIBING = "TRANSCRIBING"
 THINKING = "THINKING"
 SPEAKING = "SPEAKING"
 
+# Spoken "are you sure" templates. {command} is what would run; {effect} is
+# the entry's description (what it would do). Kept literal per request so the
+# user always hears both halves, even when {command} is an opaque script path.
+CONFIRM_PROMPT = "Are you sure you want to run {command}? That will {effect}. Say yes or no."
+
+# Whisper often returns these rather than a clean yes/no, and it can pick up
+# filler ("yes please", "no wait"). Matched as whole words, most specific first.
+YES_WORDS = {"yes", "yeah", "yep", "yup", "yepp", "yeahh", "ye", "ya", "yes please",
+             "yes sure", "sure", "ok", "okay", "go ahead", "do it", "affirmative",
+             "confirm", "confirmed", "absolutely", "definitely", "of course"}
+NO_WORDS = {"no", "nope", "nah", "negative", "cancel", "don't", "dont", "do not",
+            "stop", "wait", "no thanks", "no thank you", "abort", "deny", "denied"}
+
 
 class VoiceLoop:
-    def __init__(self, config, agent, console=None, providers=None):
+    def __init__(self, config, agent, console=None, providers=None, orb=None):
         self.config = config
         self.agent = agent
         self.console = console
         self.state = IDLE
+        self._orb = orb
         self._last_activity = time.monotonic()
 
         self.mic = MicSource(
@@ -74,6 +89,8 @@ class VoiceLoop:
         )
         if getattr(config, "voice_keep_warm", False):
             self._warm()
+        self._prev_confirm_hook = None
+        self._install_confirm_hook()
 
     def _warm(self):
         warm = getattr(self.stt, "warm", None)
@@ -92,6 +109,106 @@ class VoiceLoop:
     def log(self, msg):
         if self.console:
             self.console.print(msg)
+
+    # ---------- spoken confirmation ----------
+
+    @staticmethod
+    def _speakable_plan(plan, entry):
+        """Turn an internal plan string into something worth saying out loud.
+
+        Skill plans embed an absolute script path, which is noise when spoken,
+        so the skill id stands in for the path.
+        """
+        text = (plan or "").strip()
+        if entry is not None and entry.handler.get("type") == "skill":
+            return f"the {entry.id.replace('_', ' ')} action"
+        if text.startswith("powershell:"):
+            text = text[len("powershell:"):].strip()
+        elif text.startswith("python "):
+            text = "that command"
+        return text.rstrip(".?") or "that command"
+
+    def _effect_text(self, plan, entry):
+        """Plain-language description of what the action would do."""
+        if entry is not None and entry.desc:
+            return entry.desc.rstrip(".?")
+        return "run this command"
+
+    @staticmethod
+    def _parse_yes_no(text):
+        """True/False from a spoken answer, None when it is not clearly either."""
+        if not text:
+            return None
+        cleaned = re.sub(r"[^a-z'\s]", " ", text.lower())
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if not cleaned:
+            return None
+        # Longest phrases first so "yes please" beats a bare "yes" check.
+        tokens = cleaned.split()
+        joined = " ".join(tokens)
+        for word in sorted(YES_WORDS, key=len, reverse=True):
+            if word == joined or f" {word} " in f" {joined} ":
+                return True
+        for word in sorted(NO_WORDS, key=len, reverse=True):
+            if word == joined or f" {word} " in f" {joined} ":
+                return False
+        # A bare leading token is a common STT shape ("yes go ahead").
+        if tokens[0] in YES_WORDS:
+            return True
+        if tokens[0] in NO_WORDS:
+            return False
+        return None
+
+    def _voice_confirm(self, plan, entry=None):
+        """Ask for confirmation by voice. Returns True to run, False to abort.
+
+        Fails closed: any TTS/STT/timeout problem denies the action, so a broken
+        audio path can never escalate to "run it without asking".
+        """
+        prompt = CONFIRM_PROMPT.format(
+            command=self._speakable_plan(plan, entry),
+            effect=self._effect_text(plan, entry),
+        )
+        self.log(f"[dim]confirm (voice): {prompt}[/dim]")
+        # Speak first, then listen -- the mute gate keeps the prompt itself from
+        # being captured as the answer. If the prompt cannot be spoken the user
+        # was never actually asked, so deny rather than guess.
+        try:
+            self._speak(prompt)
+        except (TtsError, AudioError, RuntimeError) as e:
+            self.log(f"[yellow]could not speak confirmation prompt: {e} -- aborting[/yellow]")
+            return False
+        samples = self._listen()
+        if samples is None:
+            self.log("[yellow]no answer heard -- aborting[/yellow]")
+            return False
+        try:
+            answer = self._transcribe(samples)
+        except (SttError, ProviderError) as e:
+            self.log(f"[yellow]stt failed during confirm: {e}[/yellow]")
+            return False
+        verdict = self._parse_yes_no(answer)
+        if verdict is None:
+            self.log(f"[yellow]could not read that as yes or no ({answer!r}) -- aborting[/yellow]")
+            return False
+        try:
+            self._speak("Okay, running it." if verdict else "Okay, cancelled.")
+        except (TtsError, AudioError, RuntimeError):
+            pass  # verdict already decided; a failed ack is cosmetic
+        return verdict
+
+    def _install_confirm_hook(self):
+        """Route Agent confirmations through the voice loop for this run."""
+        if self.agent is None:
+            return
+        self._prev_confirm_hook = getattr(self.agent, "confirm_hook", None)
+        self.agent.confirm_hook = self._voice_confirm
+
+    def _restore_confirm_hook(self):
+        if self.agent is None:
+            return
+        if hasattr(self, "_prev_confirm_hook"):
+            self.agent.confirm_hook = self._prev_confirm_hook
 
     # ---------- memory session reset ----------
 
@@ -117,12 +234,27 @@ class VoiceLoop:
 
     # ---------- state machine ----------
 
+    def _set_state(self, name):
+        """Single point where the state changes.
+
+        Everything else -- including the spoken-confirmation sub-flow, which
+        re-enters _listen/_speak -- goes through here, so the orb overlay
+        tracks the machine without any call site being able to forget.
+        """
+        self.state = name
+        if self._orb is not None:
+            try:
+                self._orb.state(name)
+            except Exception:
+                # The overlay is decoration. Never let it break voice mode.
+                self._orb = None
+
     def _to_idle(self):
-        self.state = IDLE
+        self._set_state(IDLE)
         self.mic.gate.clear()
 
     def _listen(self):
-        self.state = LISTENING
+        self._set_state(LISTENING)
         self.log("[bold cyan]listening...[/bold cyan]")
         try:
             return self.mic.record_until_speech(
@@ -135,7 +267,7 @@ class VoiceLoop:
             return None
 
     def _transcribe(self, samples):
-        self.state = TRANSCRIBING
+        self._set_state(TRANSCRIBING)
         self.log(f"[dim]transcribing via {self.stt_name}...[/dim]")
         # Provider returns a plain string; tolerate the legacy (text, lang) tuple
         # so an older local engine still works.
@@ -145,12 +277,12 @@ class VoiceLoop:
         return result or ""
 
     def _think(self, text):
-        self.state = THINKING
+        self._set_state(THINKING)
         self.log(f"[dim]you: {text}[/dim]")
         return self.agent.handle_voice(text, llm=self.llm)
 
     def _speak(self, answer):
-        self.state = SPEAKING
+        self._set_state(SPEAKING)
         cooldown = float(getattr(self.config, "voice_cooldown_s", 2.0))
         self.mic.gate.mute(cooldown)
         t0 = time.monotonic()
@@ -209,9 +341,11 @@ class VoiceLoop:
         except KeyboardInterrupt:
             self.log("\n[dim]voice mode stopped[/dim]")
         finally:
+            self._restore_confirm_hook()
             self.mic.close()
             Speaker.stop()
 
     def close(self):
+        self._restore_confirm_hook()
         self.mic.close()
         Speaker.stop()

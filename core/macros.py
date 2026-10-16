@@ -165,7 +165,7 @@ def handle_macro_add(console, macros, registry, config):
         console.print(f"[green]macro '{trigger}' saved[/green] ({len(steps)} steps)")
 
 
-def execute_sequence(config, steps, registry, console, dry_run=False, no_confirm=False):
+def execute_sequence(config, steps, registry, console, dry_run=False, no_confirm=False, confirm_hook=None):
     results = []
     for i, step in enumerate(steps):
         tool = step.get("tool")
@@ -180,6 +180,10 @@ def execute_sequence(config, steps, registry, console, dry_run=False, no_confirm
             continue
         from .agent import Agent
         agent = Agent(config, registry, console, dry_run=False, no_confirm=no_confirm)
+        # Carry the caller's confirmation channel (voice hook) into the
+        # throwaway agent, otherwise a confirm-risk step would fall back to
+        # the console prompt and block with nobody there.
+        agent.confirm_hook = confirm_hook
         console.print(f"[bold blue]->[/bold blue] [bold]{tool}[/bold]({agent._args_str(args)})")
         result, _ = agent._run_entry(entry, args)
         style = "green" if result.ok else "red"
@@ -191,8 +195,9 @@ def execute_sequence(config, steps, registry, console, dry_run=False, no_confirm
     return results
 
 
-def execute_skill_macro(config, macro, registry, console, dry_run=False, no_confirm=False):
-    from .executor import run_skill
+def execute_skill_macro(config, macro, registry, console, dry_run=False, no_confirm=False, confirm_hook=None):
+    from .agent import Agent
+    from .registry import Entry
 
     skill_path = macro.get("skill_path")
     if not skill_path or not Path(skill_path).exists():
@@ -202,6 +207,34 @@ def execute_skill_macro(config, macro, registry, console, dry_run=False, no_conf
         console.print(f"[cyan]would run skill:[/cyan] {skill_path}")
         return True, "dry-run"
 
-    handler = {"type": "skill", "run": skill_path, "timeout": 60}
-    result = run_skill(config, handler, {})
+    # Resolve the skill's own manifest entry so it goes through the same gate
+    # as a typed command. A macro pointing at a loose script that has no
+    # manifest still runs, but as a synthetic entry with no confirm-list match.
+    entry = next(
+        (
+            e
+            for e in registry.entries.values()
+            if e.handler.get("type") == "skill" and e.handler.get("run") == skill_path
+        ),
+        None,
+    )
+    if entry is None:
+        entry = Entry(
+            id=macro.get("trigger") or Path(skill_path).parent.name,
+            desc=macro.get("description") or f"macro skill {skill_path}",
+            params=[],
+            keywords=[],
+            triggers=[],
+            tier="macro",
+            examples=[],
+            handler={"type": "skill", "run": skill_path, "timeout": 60},
+            risk="confirm",
+            source=str(skill_path),
+        )
+    agent = Agent(config, registry, console, dry_run=False, no_confirm=no_confirm)
+    # Same reason as execute_sequence: without the hook a confirm-risk step
+    # would block on a console prompt nobody is there to answer.
+    agent.confirm_hook = confirm_hook
+    console.print(f"[bold blue]->[/bold blue] [bold]{entry.id}[/bold] [dim](macro: skill)[/dim]")
+    result, _ = agent._run_entry(entry, {})
     return result.ok, result.display

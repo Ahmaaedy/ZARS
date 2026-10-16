@@ -8,7 +8,7 @@ def main():
     ns = build_parser(manifest_for(__file__)).parse_args()
     try:
         result = subprocess.run(
-            ["powershell", "-Command", "Start-Process notepad"],
+            ["powershell", "-Command", "Start-Process Notepad -NoNewWindow"],
             capture_output=True, text=True, timeout=30
         )
         emit(True, result.stdout.strip())

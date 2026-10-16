@@ -9,5 +9,5 @@
   "keywords": ["send message", "send file", "telegram", "notify me", "message me"],
   "examples": ["send message hello there", "send file C:/Users/me/report.pdf"],
   "handler": { "timeout": 30 },
-  "risk": "confirm"
+  "risk": "safe"
 }

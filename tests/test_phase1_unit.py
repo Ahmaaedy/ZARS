@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.fuzzy_match import fuzzy_match, normalize
-from core.safety import check_blocked
+from core.safety import check_blocked, check_confirm
 from core.session import Session
 from core.registry import load_registry
 from core.macros import MacroManager
@@ -81,25 +81,35 @@ if result:
 
 # ========== 1B: Safety Blocklist Tests ==========
 print("\n=== 1B: Safety Blocklist Tests ===")
+# (command, should_block, should_confirm, reason)
+# Blocked means denied outright. Confirmed means it gets past the blocklist and
+# still stops for a y/n. Neither means it just runs.
 safety_tests = [
-    ("diskpart", True, "diskpart"),
-    ("format C:", True, "format"),
-    ("Remove-Item -Recurse C:\\temp", True, "recursive delete"),
-    ("shutdown /s /t 0", True, "power action"),
-    ("Get-Process", False, "safe command"),
-    ("Start-Process notepad", False, "safe command"),
-    ("reg delete HKLM\\SOFTWARE\\Test", True, "registry edit"),
-    ("schtasks /create /tn Test /tr notepad", True, "scheduled task"),
-    ("Get-Date", False, "safe command"),
-    ("Stop-Process -Name chrome -Force", False, "safe command"),
+    ("diskpart", True, False, "diskpart"),
+    ("format C:", True, False, "format"),
+    ("Remove-Item -Recurse C:\\temp", True, False, "recursive delete"),
+    ("shutdown /s /t 0", False, True, "power action"),
+    ("Restart-Computer", False, True, "power action"),
+    ("Get-Process", False, False, "safe command"),
+    ("Start-Process notepad", False, False, "safe command"),
+    ("reg delete HKLM\\SOFTWARE\\Test", True, False, "registry edit"),
+    ("schtasks /create /tn Test /tr notepad", True, False, "scheduled task"),
+    ("Get-Date", False, False, "safe command"),
+    ("Stop-Process -Name chrome -Force", False, False, "safe command"),
 ]
 
-for command, should_block, reason in safety_tests:
+for command, should_block, should_confirm, reason in safety_tests:
     blocked, block_reason = check_blocked(command)
     test(
         f"'{command}' {'BLOCKED' if should_block else 'ALLOWED'}",
         blocked == should_block,
         f"expected {'blocked' if should_block else 'allowed'}, got {'blocked' if blocked else 'allowed'}: {block_reason}"
+    )
+    needs, _why = check_confirm(command)
+    test(
+        f"'{command}' {'CONFIRM' if should_confirm else 'SILENT'}",
+        needs == should_confirm,
+        f"expected {'confirm' if should_confirm else 'silent'}, got {'confirm' if needs else 'silent'} ({reason})"
     )
 
 # ========== 1C: Session Message Ordering ==========

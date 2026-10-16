@@ -19,5 +19,12 @@
     "trigger": "good_morning",
     "created": "2026-08-29T22:15:12.798407+00:00",
     "skill_path": "C:\\Users\\AceNo\\OneDrive\\Desktop\\pROjEcTs\\zars\\skills\\good morning\\skill.py"
+  },
+  "crank_that_soldier_boy": {
+    "description": "play crak that soulja boy on spotify this is the link https://open.spotify.com/track/66TRwr5uJwPt15mfFkzhbi?si=7f0d705d1a6c44d9",
+    "type": "skill",
+    "trigger": "crank_that_soldier_boy",
+    "created": "2026-10-12T14:02:49.640586+00:00",
+    "skill_path": "C:\\Users\\AceNo\\OneDrive\\Desktop\\pROjEcTs\\zars\\skills\\crank that soldier boy\\skill.py"
   }
 }

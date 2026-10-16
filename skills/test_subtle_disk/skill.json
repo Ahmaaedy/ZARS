@@ -1,0 +1,27 @@
+{
+  "id": "test_subtle_disk",
+  "desc": "Checks the available disk space on a specified drive or path.",
+  "params": [
+    {
+      "name": "path",
+      "type": "string",
+      "required": true,
+      "desc": "Drive letter or mount point to query (e.g., C: or /home)."
+    }
+  ],
+  "keywords": [
+    "disk space",
+    "free space",
+    "drive usage",
+    "storage"
+  ],
+  "examples": [
+    "Get-DiskSpace -Path C:",
+    "Get-DiskSpace -Path D:",
+    "Get-DiskSpace -Path /mnt/data"
+  ],
+  "risk": "safe",
+  "handler": {
+    "type": "skill"
+  }
+}

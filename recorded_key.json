@@ -1,0 +1,11 @@
+{
+  "repr": "<Key.f17: <128>>",
+  "platform": "win32",
+  "type": "named",
+  "name": "f17",
+  "vk": 128,
+  "raw_vk": 128,
+  "scan_code": 104,
+  "flags": 0,
+  "recorded_at": "2026-10-12 14:23:06"
+}

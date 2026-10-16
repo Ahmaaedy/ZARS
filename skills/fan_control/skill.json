@@ -1,0 +1,13 @@
+{
+  "id": "fan_control",
+  "desc": "control the laptop case fans using the recorded fan hotkey: boost to max, quiet down, or toggle the current fan mode",
+  "params": [
+    { "name": "action", "type": "string", "required": true, "desc": "max (spin the fans up), quiet (drop to silent), or toggle (flip the current mode)" },
+    { "name": "file", "type": "string", "required": false, "desc": "path to a recorded_key.json file (default: recorded_key.json in the ZARS root)" }
+  ],
+  "triggers": ["fans", "fan mode", "boost fans", "spin up fans", "quiet the fans", "cool my pc"],
+  "keywords": ["fire up my fans", "set my pc fans to max", "fans to max", "max fan speed", "turn up the fans", "turn down the fans", "quiet the fans", "cool my pc", "spin up the fans"],
+  "examples": ["fire up my fans", "set my pc fans to max", "quiet the fans"],
+  "handler": { "type": "skill", "timeout": 15 },
+  "risk": "safe"
+}

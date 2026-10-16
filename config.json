@@ -45,5 +45,9 @@
   "voice_kokoro_voice": "af_sarah",
   "voice_kokoro_speed": 1.0,
   "voice_keep_warm": false,
-  "voice_session_reset_s": 300
+  "voice_session_reset_s": 300,
+  "voice_orb_enabled": true,
+  "voice_orb_size": 120,
+  "voice_orb_transition_ms": 400,
+  "voice_orb_settle": 0.25
 }

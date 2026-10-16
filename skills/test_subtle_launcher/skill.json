@@ -1,0 +1,28 @@
+{
+  "id": "test_subtle_launcher",
+  "desc": "Opens specified Windows applications by name.",
+  "params": [
+    {
+      "name": "app_name",
+      "type": "string",
+      "required": true,
+      "desc": "Name of the application to open (e.g., 'notepad.exe' or 'calc')."
+    }
+  ],
+  "keywords": [
+    "open",
+    "launch",
+    "start",
+    "run",
+    "application"
+  ],
+  "examples": [
+    "open Notepad",
+    "launch calculator",
+    "start chrome"
+  ],
+  "risk": "safe",
+  "handler": {
+    "type": "skill"
+  }
+}

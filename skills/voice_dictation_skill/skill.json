@@ -1,0 +1,44 @@
+{
+  "id": "voice_dictation_skill",
+  "desc": "Records audio from the microphone, transcribes speech to text, and simulates keyboard presses until the user says \"that's the end\".",
+  "params": [
+    {
+      "name": "language",
+      "type": "string",
+      "required": false,
+      "desc": "Language code for speech recognition (e.g., 'en-US')."
+    },
+    {
+      "name": "continuous",
+      "type": "boolean",
+      "required": false,
+      "desc": "If true, the skill continues listening until 'that's the end' is spoken."
+    },
+    {
+      "name": "sensitivity",
+      "type": "number",
+      "required": false,
+      "desc": "Audio sensitivity level (0.0 to 1.0)."
+    }
+  ],
+  "keywords": [
+    "dictate",
+    "voice",
+    "speech",
+    "transcribe",
+    "audio",
+    "record",
+    "type",
+    "keyboard",
+    "that's the end",
+    "stop"
+  ],
+  "examples": [
+    "dictate",
+    "that's the end"
+  ],
+  "risk": "confirm",
+  "handler": {
+    "type": "skill"
+  }
+}

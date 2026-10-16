@@ -113,7 +113,7 @@ test("router < 5ms per call", per_call < 5, f"took {per_call:.2f}ms")
 # ========== 5D: Safety Check Performance ==========
 print("\n=== 5D: Safety Check Performance ===")
 
-from core.safety import check_blocked
+from core.safety import check_blocked, check_confirm
 
 test_commands = [
     "Get-Date",
@@ -128,6 +128,7 @@ start = time.time()
 for _ in range(iterations):
     for cmd in test_commands:
         check_blocked(cmd)
+        check_confirm(cmd)
 elapsed = time.time() - start
 per_call = (elapsed / iterations / len(test_commands)) * 1000000  # us
 

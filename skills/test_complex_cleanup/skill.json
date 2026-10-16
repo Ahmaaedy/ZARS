@@ -1,0 +1,42 @@
+{
+  "id": "test_complex_cleanup",
+  "desc": "Checks available disk space and cleans temporary files if free space falls below a specified threshold.",
+  "params": [
+    {
+      "name": "threshold_gb",
+      "type": "number",
+      "required": true,
+      "desc": "Disk space threshold in gigabytes; if free space is below this value, temp files will be cleaned."
+    },
+    {
+      "name": "dry_run",
+      "type": "boolean",
+      "required": false,
+      "desc": "When true, only report what would be cleaned without actually deleting files."
+    },
+    {
+      "name": "temp_dir",
+      "type": "string",
+      "required": false,
+      "desc": "Path to the temporary directory to clean; defaults to the system temp folder."
+    }
+  ],
+  "keywords": [
+    "disk space",
+    "cleanup",
+    "temp files",
+    "low space",
+    "clean",
+    "free space",
+    "threshold"
+  ],
+  "examples": [
+    "ZARS RunSkill test_complex_cleanup -threshold_gb 5",
+    "ZARS RunSkill test_complex_cleanup -threshold_gb 10 -dry_run $true",
+    "python -c \"import zars; zars.run_skill('test_complex_cleanup', threshold_gb=5)\""
+  ],
+  "risk": "confirm",
+  "handler": {
+    "type": "skill"
+  }
+}

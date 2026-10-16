@@ -9,7 +9,7 @@ from .longterm_memory import LongTermMemory
 from .memory import ConversationMemory
 from .registry import RegistryError, render_template
 from .router import Router
-from .safety import check_blocked
+from .safety import check_blocked, check_confirm
 from .session import Session
 
 
@@ -27,6 +27,9 @@ class Agent:
         self.memory = ConversationMemory(config)
         self.longterm = LongTermMemory(config)
         self._confirm_rejections = 0
+        # Set by the voice loop to speak the confirmation and listen for a
+        # yes/no answer instead of reading stdin. None = console prompt.
+        self.confirm_hook = None
 
     def reload(self, registry):
         self.registry = registry
@@ -116,23 +119,35 @@ class Agent:
         self.console.print(f"[bold magenta]->[/bold magenta] [bold]{trigger}[/bold] [dim](macro: {macro['type']})[/dim]")
         if macro["type"] == "sequence":
             from .macros import execute_sequence
-            execute_sequence(self.config, macro["steps"], self.registry, self.console, self.dry_run, self.no_confirm)
+            execute_sequence(self.config, macro["steps"], self.registry, self.console, self.dry_run, self.no_confirm, self.confirm_hook)
         elif macro["type"] == "skill":
             from .macros import execute_skill_macro
-            ok, output = execute_skill_macro(self.config, macro, self.registry, self.console, self.dry_run, self.no_confirm)
+            ok, output = execute_skill_macro(self.config, macro, self.registry, self.console, self.dry_run, self.no_confirm, self.confirm_hook)
             style = "green" if ok else "red"
             mark = "OK" if ok else "FAILED"
             self.console.print(Panel(output or "(no output)", title=f"{mark} {trigger}", border_style=style))
 
     # ---------- safety ----------
 
-    def _confirm(self, plan):
+    def _confirm(self, plan, entry=None, reason=None):
         if self.no_confirm:
             return True
         if self._confirm_rejections >= 2:
             self.console.print("[bold red]auto-denied:[/bold red] too many rejections this session")
             return False
-        self.console.print(Panel(plan, title="confirm", border_style="yellow"))
+        # Voice mode: speak the confirmation and wait for a spoken yes/no.
+        # The hook owns the interaction, so no console prompt is shown.
+        if self.confirm_hook is not None:
+            try:
+                ok = bool(self.confirm_hook(plan, entry))
+            except Exception as e:
+                self.console.print(f"[yellow]voice confirmation failed: {e}[/yellow]")
+                ok = False
+            if not ok:
+                self._confirm_rejections += 1
+            return ok
+        title = f"confirm: {reason}" if reason else "confirm"
+        self.console.print(Panel(plan, title=title, border_style="yellow"))
         try:
             answer = interactive.ask("run this? [y/N]", default="n")
         except (KeyboardInterrupt, EOFError):
@@ -144,15 +159,20 @@ class Agent:
             self._confirm_rejections += 1
         return ok
 
-    def _guard(self, plan, risk):
-        blocked, reason = check_blocked(plan) if plan.startswith("powershell:") else (False, None)
+    def _guard(self, plan, entry=None):
+        # Two lists decide everything: BLOCKLIST denies outright, CONFIRM_LIST
+        # asks. Anything else runs. Both are checked against the rendered plan
+        # of every handler type, not just shell, so a skill cannot be a way
+        # around them.
+        blocked, reason = check_blocked(plan)
         if blocked:
             self.console.print(f"[bold red]blocked:[/bold red] {reason}")
             return "blocked", f"blocked by safety policy: {reason}"
         if self.dry_run:
             self.console.print(f"[cyan]would run:[/cyan] {plan}")
             return "dry", None
-        if risk != "safe" and not self._confirm(plan):
+        needs, why = check_confirm(plan, entry.id if entry else None)
+        if needs and not self._confirm(plan, entry, why):
             self.console.print("[yellow]aborted[/yellow]")
             return "abort", None
         return "run", None
@@ -176,7 +196,7 @@ class Agent:
         plan, err = self._plan_for_entry(entry, args)
         if err:
             return ExecResult(False, -1, "", err), None
-        status, reason = self._guard(plan, entry.risk)
+        status, reason = self._guard(plan, entry)
         if status != "run":
             return ExecResult(status == "dry", -1, "", f"{status}: {plan}"), plan
         result, _ = execute(self.config, entry, args)
@@ -190,7 +210,9 @@ class Agent:
             self.console.print(f"[bold red]auto-denied:[/bold red] this command already failed")
             return ExecResult(False, -1, "", f"auto-denied: already failed: {command}"), None
         plan = f"powershell: {command}"
-        status, reason = self._guard(plan, "confirm")
+        # Freeform commands are not special-cased any more: the confirm list
+        # decides, so a stray shutdown still stops but Get-Date just runs.
+        status, reason = self._guard(plan, None)
         if status != "run":
             return ExecResult(status == "dry", -1, "", f"{status}: {plan}"), plan
         result = run_shell(self.config, command)

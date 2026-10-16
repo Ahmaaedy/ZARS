@@ -15,7 +15,7 @@
     "keywords": ["close", "quit app", "kill process"],
     "examples": ["close notepad", "kill process chrome"],
     "handler": { "type": "shell", "command": "Stop-Process -Name \"{app_name}\" -Force -ErrorAction SilentlyContinue", "timeout": 15 },
-    "risk": "confirm"
+    "risk": "safe"
   },
   {
     "id": "open_url",
@@ -24,15 +24,6 @@
     "keywords": ["open https", "open http", "go to"],
     "examples": ["open https://github.com", "go to youtube.com"],
     "handler": { "type": "shell", "command": "Start-Process \"{url}\"", "timeout": 15 },
-    "risk": "safe"
-  },
-  {
-    "id": "set_volume",
-    "desc": "set system volume to a 0-100 level",
-    "params": [{ "name": "level", "type": "integer", "required": true, "desc": "volume level 0-100" }],
-    "keywords": ["set volume", "volume to"],
-    "examples": ["set volume 50", "volume to 30"],
-    "handler": { "type": "builtin", "fn": "set_volume" },
     "risk": "safe"
   },
   {
@@ -60,7 +51,7 @@
     "keywords": ["wifi on", "wifi off", "toggle wifi"],
     "examples": ["wifi off", "wifi on"],
     "handler": { "type": "shell", "command": "netsh interface set interface \"Wi-Fi\" {state}", "timeout": 20 },
-    "risk": "confirm"
+    "risk": "safe"
   },
   {
     "id": "set_timer",

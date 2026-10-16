@@ -142,10 +142,23 @@ def run_voice(config, registry, agent, console):
     model, no mic, missing dependency) is reported and returns instead of
     crashing the app."""
     from core.voice.orchestrator import VoiceLoop
+    from core.voice.orb_client import OrbClient
+
+    # The orb overlay is a separate process: Qt needs the main thread for its
+    # event loop and the voice loop blocks that thread on the microphone. It is
+    # decoration, so every failure path here is non-fatal.
+    orb = OrbClient(
+        enabled=bool(getattr(config, "voice_orb_enabled", True)),
+        size=int(getattr(config, "voice_orb_size", 120)),
+        transition_ms=int(getattr(config, "voice_orb_transition_ms", 400)),
+        settle=float(getattr(config, "voice_orb_settle", 0.25)),
+        log=console.print,
+    ).start()
 
     try:
-        loop = VoiceLoop(config, agent, console=console)
+        loop = VoiceLoop(config, agent, console=console, orb=orb)
     except Exception as e:
+        orb.stop()
         console.print(f"[bold red]voice mode unavailable:[/bold red] {e}")
         console.print("[dim]check voice.* settings in config.json, then run "
                       "`python test_voice.py all` to isolate the stage[/dim]")
@@ -163,6 +176,7 @@ def run_voice(config, registry, agent, console):
         pass
     finally:
         loop.close()
+        orb.stop()
     return 0
 
 

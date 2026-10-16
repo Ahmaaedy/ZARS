@@ -1,0 +1,14 @@
+{
+  "id": "display_audio",
+  "desc": "set, read, or mute the system volume and the screen brightness as a percentage (0-100)",
+  "params": [
+    { "name": "target", "type": "string", "required": true, "desc": "volume or brightness" },
+    { "name": "op", "type": "string", "required": false, "default": "set", "desc": "set (default), get (report current level), mute, or unmute" },
+    { "name": "level", "type": "string", "required": false, "desc": "0-100, or max/full (100), min/off (0), half (50)" }
+  ],
+  "triggers": ["set volume", "volume to", "sound level", "how loud", "set brightness", "brightness to", "screen brightness", "dim the screen", "mute", "unmute"],
+  "keywords": ["change the volume", "turn the volume up", "turn the volume down", "crank the volume", "crank the brightness", "lower the brightness", "make the screen brighter", "make the screen darker", "mute the pc", "unmute the pc", "sound level", "screen brightness"],
+  "examples": ["set volume to 50", "crank the brightness to max", "mute", "how loud is my pc", "set brightness to 20"],
+  "handler": { "type": "skill", "timeout": 30 },
+  "risk": "safe"
+}

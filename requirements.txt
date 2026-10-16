@@ -8,8 +8,9 @@ rich
 requests
 python-dotenv
 numpy
-# animations/display_over.py overlay
+# animations/display_over.py and the `--voice` orb overlay
 sounddevice
+PyQt5                    # frameless always-on-top orb overlay (voice mode only)
 
 # --- optional LLM providers (core/llm.py lazy imports) ---
 google-genai
@@ -22,6 +23,8 @@ beautifulsoup4          # web_search
 Pillow                  # screenshot_ocr
 pyperclip               # screenshot_ocr
 pywin32                 # win32com: skills/file_find + SAPI test helpers
+pycaw                   # Core Audio volume for skills/display_audio
+comtypes                # pycaw COM backend for skills/display_audio
 telethon                # notify_send
 # screenshot_ocr OCR backend (WinRT bindings, one pip pkg per namespace):
 # winrt-Windows.Media.Ocr winrt-Windows.Globalization winrt-Windows.Graphics.Imaging winrt-Windows.Storage
