@@ -52,6 +52,7 @@ class VoiceLoop:
         self.console = console
         self.state = IDLE
         self._orb = orb
+        self._cap_idx = None
         self._last_activity = time.monotonic()
 
         self.mic = MicSource(
@@ -255,6 +256,10 @@ class VoiceLoop:
 
     def _listen(self):
         self._set_state(LISTENING)
+        # The previous answer's caption is still readable at this point, but it
+        # would sit over the screen while the user talks. Drop it on the way in
+        # rather than on the way out, so it stays up for as long as possible.
+        self._cap_clear()
         self.log("[bold cyan]listening...[/bold cyan]")
         try:
             return self.mic.record_until_speech(
@@ -287,15 +292,52 @@ class VoiceLoop:
         self.mic.gate.mute(cooldown)
         t0 = time.monotonic()
         try:
-            spoke = self.tts.stream_to_speaker(answer, self.speaker)
+            spoke = self.tts.stream_to_speaker(
+                answer, self.speaker,
+                on_sentence_start=self._cap_say,
+                on_sentence_end=self._cap_pace,
+            )
         except (TtsError, AudioError) as e:
             self.log(f"[yellow]tts failed: {e}[/yellow]")
+            self._cap_clear()
             return
+        self._cap_clear()
         if spoke:
             self.log(f"[dim]spoke {time.monotonic() - t0:.1f}s "
                      f"({self.tts.voice}) via device {self.speaker.device}[/dim]")
         else:
             self.log("[dim]nothing to speak[/dim]")
+
+    # ---------- orb speech caption ----------
+    #
+    # These run on the thread blocked in speaker.play(), inside
+    # stream_to_speaker, so they see the audio boundaries directly. They are
+    # deliberately not routed through _set_state: that tracks the state machine,
+    # this tracks the words.
+
+    def _cap_say(self, text):
+        if self._orb is None:
+            return
+        try:
+            self._cap_idx = self._orb.say(text)
+        except Exception:
+            self._orb = None
+
+    def _cap_pace(self, ms):
+        if self._orb is None:
+            return
+        try:
+            self._orb.pace(self._cap_idx, ms)
+        except Exception:
+            self._orb = None
+
+    def _cap_clear(self):
+        if self._orb is None:
+            return
+        try:
+            self._orb.clear()
+        except Exception:
+            self._orb = None
 
     def handle_once(self):
         """Advance the machine one full cycle: listen -> transcribe -> think

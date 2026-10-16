@@ -67,6 +67,15 @@ DEFAULTS = {
     "gemini_timeout_seconds": 30.0,
     "gemini_retry_after_max_s": 2.0,
     "online_fallback_to_local": True,
+    # --- orb overlay speech caption (voice mode only) ---
+    # A translucent bubble above the orb that writes what is being spoken.
+    # caption_mode: typewriter reveals word by word in time with the audio;
+    # instant shows each whole sentence as it starts.
+    "voice_orb_caption": True,
+    "voice_orb_caption_mode": "typewriter",
+    "voice_orb_caption_width": 360,
+    "voice_orb_caption_max_lines": 4,
+    "voice_orb_caption_fade_ms": 400,
 }
 
 # keys sourced from .env; config.json can still override them
@@ -83,6 +92,12 @@ ENV_KEYS = {
     "GEMINI_LLM_MODEL": "gemini_llm_model",
     "GEMINI_TIMEOUT_SECONDS": "gemini_timeout_seconds",
     "GEMINI_RETRY_AFTER_MAX_S": "gemini_retry_after_max_s",
+    # Orb speech caption (voice mode). See DEFAULTS for what each one does.
+    "ZARS_ORB_CAPTION": "voice_orb_caption",
+    "ZARS_ORB_CAPTION_MODE": "voice_orb_caption_mode",
+    "ZARS_ORB_CAPTION_WIDTH": "voice_orb_caption_width",
+    "ZARS_ORB_CAPTION_MAX_LINES": "voice_orb_caption_max_lines",
+    "ZARS_ORB_CAPTION_FADE_MS": "voice_orb_caption_fade_ms",
 }
 
 # env values coerced to the types DEFAULTS expects
@@ -92,6 +107,10 @@ ENV_CASTS = {
     "gemini_timeout_seconds": float,
     "gemini_retry_after_max_s": float,
     "online_fallback_to_local": lambda v: str(v).strip().lower() in ("1", "true", "yes", "on"),
+    "voice_orb_caption": lambda v: str(v).strip().lower() in ("1", "true", "yes", "on"),
+    "voice_orb_caption_width": int,
+    "voice_orb_caption_max_lines": int,
+    "voice_orb_caption_fade_ms": int,
 }
 
 

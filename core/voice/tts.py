@@ -79,15 +79,32 @@ class KokoroTts:
         except Exception as e:
             raise TtsError(f"synthesis failed: {e}") from e
 
-    def stream_to_speaker(self, text, speaker):
+    def stream_to_speaker(self, text, speaker, on_sentence_start=None,
+                          on_sentence_end=None, on_done=None):
         """Speak `text`, streaming sentence by sentence.
 
         Synthesis runs in a worker thread with its own event loop; chunks are
         handed to `speaker` as they are produced. Returns True if anything was
         spoken.
+
+        The callbacks exist so a live caption can track the audio. They fire on
+        the calling thread -- the one blocked in speaker.play() -- so a caller
+        that talks to UI or IPC does not need its own lock:
+
+            on_sentence_start(text)      the first chunk of a sentence is
+                                         about to play
+            on_sentence_end(ms)          the previous sentence stopped playing
+                                         after `ms` of real wall-clock audio
+            on_done()                    every sentence has played
+
+        on_sentence_end's duration is a sum of len(samples)/sr over that
+        sentence's chunks. Playback is sequential and blocking, so that sum is
+        the time the audio really occupied, not an estimate.
         """
         sentences = split_sentences(text)
         if not sentences:
+            if on_done:
+                on_done()
             return False
 
         chunks = queue.Queue(maxsize=8)
@@ -98,12 +115,13 @@ class KokoroTts:
             async def run():
                 loop = asyncio.get_running_loop()
                 k = self.load()
-                for sentence in sentences:
+                for idx, sentence in enumerate(sentences):
                     async for samples, sr in k.create_stream(
                         sentence, voice=self.voice, speed=self.speed, lang="en-us"
                     ):
                         await loop.run_in_executor(
-                            None, chunks.put, (np.asarray(samples, dtype=np.float32), sr)
+                            None, chunks.put,
+                            (idx, np.asarray(samples, dtype=np.float32), sr),
                         )
 
             try:
@@ -117,16 +135,41 @@ class KokoroTts:
         t.start()
 
         spoke = False
+        current = None
+        spent_ms = 0.0
+
+        def end_sentence():
+            if on_sentence_end is not None:
+                on_sentence_end(spent_ms)
+
         try:
             while True:
                 item = chunks.get()
                 if item is DONE:
                     break
-                samples, sr = item
+                idx, samples, sr = item
+                # create_stream yields several chunks per sentence, so the index
+                # is what tells the consumer where one sentence ends and the
+                # next begins.
+                if idx != current:
+                    if current is not None:
+                        end_sentence()
+                    current = idx
+                    spent_ms = 0.0
+                    if on_sentence_start is not None:
+                        on_sentence_start(sentences[idx])
                 speaker.play(samples, sr)
+                spent_ms += len(samples) / float(sr) * 1000.0
                 spoke = True
         finally:
             t.join(timeout=30)
+            # Close out the caption even if play() raised partway through,
+            # otherwise a mid-answer audio failure leaves the bubble stuck at
+            # full opacity until the next turn clears it.
+            if current is not None:
+                end_sentence()
+            if on_done is not None:
+                on_done()
 
         if "err" in failure and not spoke:
             raise TtsError(f"stream synthesis failed: {failure['err']}")

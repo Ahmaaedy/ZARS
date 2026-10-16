@@ -153,6 +153,11 @@ def run_voice(config, registry, agent, console):
         transition_ms=int(getattr(config, "voice_orb_transition_ms", 400)),
         settle=float(getattr(config, "voice_orb_settle", 0.25)),
         log=console.print,
+        caption=bool(getattr(config, "voice_orb_caption", True)),
+        caption_mode=str(getattr(config, "voice_orb_caption_mode", "typewriter")),
+        caption_width=int(getattr(config, "voice_orb_caption_width", 360)),
+        caption_max_lines=int(getattr(config, "voice_orb_caption_max_lines", 4)),
+        caption_fade_ms=int(getattr(config, "voice_orb_caption_fade_ms", 400)),
     ).start()
 
     try:

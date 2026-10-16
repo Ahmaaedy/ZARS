@@ -49,5 +49,10 @@
   "voice_orb_enabled": true,
   "voice_orb_size": 120,
   "voice_orb_transition_ms": 400,
-  "voice_orb_settle": 0.25
+  "voice_orb_settle": 0.25,
+  "voice_orb_caption": true,
+  "voice_orb_caption_mode": "typewriter",
+  "voice_orb_caption_width": 360,
+  "voice_orb_caption_max_lines": 4,
+  "voice_orb_caption_fade_ms": 400
 }
