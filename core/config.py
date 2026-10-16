@@ -28,6 +28,20 @@ DEFAULTS = {
     "voice_wakeword_model": str(Path(__file__).resolve().parent.parent / "models" / "wakeword" / "hey_rhasspy_v0.1.onnx"),
     "voice_wakeword_threshold": 0.5,
     "voice_cooldown_s": 2.0,
+    # She answers one request per wake word, then ignores everything (including
+    # further wake words) until this window elapses. Set always_asleep to false
+    # for the old always-hot behaviour.
+    "voice_always_asleep": True,
+    "voice_sleep_after_answer_s": 3.0,
+    # Minimum gap between two wakes, and how far the score must fall back after
+    # firing before another wake can arm. Distinct from voice_cooldown_s, which
+    # only suppresses her own playback echoing into the mic.
+    "voice_wake_cooldown_s": 2.0,
+    "voice_wake_rearm_ratio": 0.6,
+    # Hard cap on how long a single wake phrase can hold the detector. Without
+    # it, a rearm floor that in-speech audio never dips below would leave her
+    # unable to wake again for the rest of the session.
+    "voice_wake_max_lock_s": 5.0,
     # Silero VAD: the .onnx ships inside the silero_vad wheel
     "voice_vad_model": "",
     "voice_vad_threshold": 0.5,
@@ -98,6 +112,15 @@ ENV_KEYS = {
     "ZARS_ORB_CAPTION_WIDTH": "voice_orb_caption_width",
     "ZARS_ORB_CAPTION_MAX_LINES": "voice_orb_caption_max_lines",
     "ZARS_ORB_CAPTION_FADE_MS": "voice_orb_caption_fade_ms",
+    # --- voice sleep/wake policy (see DEFAULTS) ---
+    "ZARS_VOICE_ALWAYS_ASLEEP": "voice_always_asleep",
+    "ZARS_VOICE_SLEEP_AFTER_ANSWER_S": "voice_sleep_after_answer_s",
+    "ZARS_VOICE_WAKEWORD_THRESHOLD": "voice_wakeword_threshold",
+    "ZARS_VOICE_WAKE_COOLDOWN_S": "voice_wake_cooldown_s",
+    "ZARS_VOICE_WAKE_REARM_RATIO": "voice_wake_rearm_ratio",
+    "ZARS_VOICE_WAKE_MAX_LOCK_S": "voice_wake_max_lock_s",
+    "ZARS_VOICE_NO_SPEECH_TIMEOUT_S": "voice_no_speech_timeout_s",
+    "ZARS_VOICE_MAX_RECORD_S": "voice_max_record_s",
 }
 
 # env values coerced to the types DEFAULTS expects
@@ -111,6 +134,15 @@ ENV_CASTS = {
     "voice_orb_caption_width": int,
     "voice_orb_caption_max_lines": int,
     "voice_orb_caption_fade_ms": int,
+    # --- voice sleep/wake policy ---
+    "voice_always_asleep": lambda v: str(v).strip().lower() in ("1", "true", "yes", "on"),
+    "voice_sleep_after_answer_s": float,
+    "voice_wakeword_threshold": float,
+    "voice_wake_cooldown_s": float,
+    "voice_wake_rearm_ratio": float,
+    "voice_wake_max_lock_s": float,
+    "voice_no_speech_timeout_s": float,
+    "voice_max_record_s": float,
 }
 
 

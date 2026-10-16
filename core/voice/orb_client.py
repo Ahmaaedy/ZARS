@@ -25,6 +25,9 @@ from pathlib import Path
 # Which animation each orchestrator state shows.
 STATE_TO_ORB = {
     "IDLE": "composing",
+    # Dormant between requests. Same animation as idle: the visible difference
+    # is that the speech caption has been dropped, not a new orb mode.
+    "SLEEPING": "composing",
     "LISTENING": "listening",
     # Everything between hearing a prompt and waiting for the next one.
     "TRANSCRIBING": "working",

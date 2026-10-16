@@ -31,6 +31,8 @@
   "voice_speaker_device": "Speakers (FxSound Audio Enhancer)",
   "voice_wakeword_model": "models/wakeword/hey_rhasspy_v0.1.onnx",
   "voice_wakeword_threshold": 0.19,
+  "voice_always_asleep": true,
+  "voice_sleep_after_answer_s": 3.0,
   "voice_cooldown_s": 2.0,
   "voice_vad_model": "models/vad/silero_vad.onnx",
   "voice_vad_threshold": 0.5,

@@ -26,6 +26,7 @@ from .vad import SileroVad, VadError
 from .wakeword import WakeWordDetector, WakeWordError
 
 IDLE = "IDLE"
+SLEEPING = "SLEEPING"
 LISTENING = "LISTENING"
 TRANSCRIBING = "TRANSCRIBING"
 THINKING = "THINKING"
@@ -60,10 +61,22 @@ class VoiceLoop:
             device=getattr(config, "voice_mic_device", None),
         )
         self.speaker = Speaker(device=getattr(config, "voice_speaker_device", None))
+        # Sleep policy. The wake word is the only way in; `always_asleep` just
+        # decides whether she drops back into SLEEPING after each request or
+        # stays hot, which is the old behaviour.
+        self.always_asleep = bool(getattr(config, "voice_always_asleep", True))
+        self.sleep_after_answer_s = float(
+            getattr(config, "voice_sleep_after_answer_s", 3.0))
+        self._wake_at = 0.0
         self.wake = WakeWordDetector(
             model_path=getattr(config, "voice_wakeword_model", ""),
             threshold=getattr(config, "voice_wakeword_threshold", 0.5),
-            cooldown_s=getattr(config, "voice_cooldown_s", 2.0),
+            # Deliberately not voice_cooldown_s: that is how long her own
+            # playback is muted to avoid self-triggering, and tuning it should
+            # not move the wake re-arm delay.
+            cooldown_s=getattr(config, "voice_wake_cooldown_s", 2.0),
+            rearm_ratio=getattr(config, "voice_wake_rearm_ratio", 0.6),
+            max_lock_s=getattr(config, "voice_wake_max_lock_s", 5.0),
         )
         self.vad = SileroVad(
             model_path=getattr(config, "voice_vad_model", ""),
@@ -254,6 +267,35 @@ class VoiceLoop:
         self._set_state(IDLE)
         self.mic.gate.clear()
 
+    # ---------- sleep / wake policy ----------
+
+    def _enter_sleep(self):
+        """Dormant between requests; only a wake word brings her back.
+
+        Called after a completed cycle. The gate lives here and in run()'s wake
+        check, never in _listen(): the spoken-confirmation sub-flow re-enters
+        _listen() with no wake word because she asked the question, and gating
+        there would deadlock every confirmation.
+        """
+        self._cap_clear()
+        if not self.always_asleep or self.sleep_after_answer_s <= 0:
+            return
+        self._wake_at = time.monotonic() + self.sleep_after_answer_s
+        self.wake.suspend(self.sleep_after_answer_s)
+        self._set_state(SLEEPING)
+        self.log(f"[dim]asleep {self.sleep_after_answer_s:g}s"
+                 f" -- say the wake word when you're ready[/dim]")
+
+    def _wake_from_sleep(self, now):
+        """Return to IDLE once the refractory window has elapsed."""
+        if self.state == SLEEPING and now >= self._wake_at:
+            self._set_state(IDLE)
+            self.log("[dim]awake[/dim]")
+
+    def _sleep_policy(self):
+        return ("one request per wake" if self.always_asleep
+                else "stays awake between requests")
+
     def _listen(self):
         self._set_state(LISTENING)
         # The previous answer's caption is still readable at this point, but it
@@ -367,17 +409,26 @@ class VoiceLoop:
         return text
 
     def run(self, max_cycles=None):
-        """Idle loop: score frames for the wake word until a cycle completes."""
+        """Idle loop: score frames for the wake word until a cycle completes.
+
+        While asleep the frames are still read -- closing the mic would mean
+        hearing no wake word at all -- but they are never turned into a request.
+        Nothing buffers, records, or runs VAD/STT/LLM in that state.
+        """
         self.log(
             f"[bold cyan]voice mode[/bold cyan] -- say [bold]{self.wake.name}[/bold] "
-            f"(threshold {self.wake.threshold:.2f}). Ctrl+C to quit."
+            f"(threshold {self.wake.threshold:.2f}, {self._sleep_policy()}). "
+            f"Ctrl+C to quit."
         )
         cycles = 0
         try:
             for frame in self.mic.stream():
-                if self.wake.fired(frame, time.monotonic()):
+                now = time.monotonic()
+                self._wake_from_sleep(now)
+                if self.wake.fired(frame, now):
                     self.handle_once()
                     cycles += 1
+                    self._enter_sleep()
                     if max_cycles and cycles >= max_cycles:
                         return
         except KeyboardInterrupt:
