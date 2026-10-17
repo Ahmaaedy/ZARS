@@ -17,8 +17,12 @@ Design notes:
 """
 import re
 import time
+from pathlib import Path
+
+import numpy as np
 
 from ..providers.base import ProviderError
+from . import devices
 from .audio_io import AudioError, MicSource, Speaker
 from .stt import SttEngine, SttError
 from .tts import KokoroTts, TtsError
@@ -55,6 +59,9 @@ class VoiceLoop:
         self._orb = orb
         self._cap_idx = None
         self._last_activity = time.monotonic()
+
+        # Apply any host-API override before anything resolves a device.
+        devices.set_host_preference(getattr(config, "voice_audio_host_api", ""))
 
         self.mic = MicSource(
             sample_rate=getattr(config, "voice_sample_rate", 16000),
@@ -105,6 +112,10 @@ class VoiceLoop:
             self._warm()
         self._prev_confirm_hook = None
         self._install_confirm_hook()
+        # Wake chime is decoded on the first wake, not at startup, so a missing
+        # file costs nothing until it would actually have been used.
+        self._chime = None
+        self._chime_tried = False
 
     def _warm(self):
         warm = getattr(self.stt, "warm", None)
@@ -173,12 +184,79 @@ class VoiceLoop:
             return False
         return None
 
-    def _voice_confirm(self, plan, entry=None):
+    def _countdown_seconds(self, reason):
+        """Grace period for `reason`, or 0 when it should use the y/N prompt."""
+        from ..safety import COUNTDOWN_REASONS
+
+        if reason not in COUNTDOWN_REASONS:
+            return 0.0
+        try:
+            return max(0.0, float(getattr(self.config, "confirm_countdown_seconds", 0) or 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _voice_countdown(self, plan, entry, reason, seconds):
+        """Announce the countdown, listen for an objection, then act.
+
+        Silence means go, matching the console path. The one thing that still
+        denies is an unspeakable warning: if the user was never told the machine
+        is about to reboot, they cannot meaningfully object to it.
+        """
+        warning = (f"{self._effect_text(plan, entry)} in {seconds:.0f} seconds. "
+                   f"Say stop to cancel.")
+        self.log(f"[dim]countdown (voice): {warning}[/dim]")
+        try:
+            self._speak(warning)
+        except (TtsError, AudioError, RuntimeError) as e:
+            self.log(f"[yellow]could not speak the countdown warning: {e} -- aborting[/yellow]")
+            return False
+
+        # A little headroom over the window so a "stop" started near the end is
+        # still heard; silence is the go signal, not an error.
+        samples = self._listen(max_record_s=seconds + 2, no_speech_timeout_s=seconds + 1)
+        if samples is None:
+            self.log("[dim]nothing said during the countdown -- running it[/dim]")
+            self._speak_quietly("Running it now.")
+            return True
+
+        try:
+            answer = self._transcribe(samples)
+        except (SttError, ProviderError) as e:
+            self.log(f"[yellow]stt failed during the countdown ({e}) -- running it[/yellow]")
+            self._speak_quietly("Running it now.")
+            return True
+
+        verdict = self._parse_yes_no(answer)
+        if verdict is False:
+            self.log(f"[dim]countdown heard {answer!r} -- cancelled[/dim]")
+            self._speak_quietly("Okay, cancelled.")
+            return False
+
+        # An unrecognised phrase is not an objection, so it proceeds. Only a
+        # clear refusal cancels; noise must never veto a power action silently.
+        self.log(f"[dim]countdown heard {answer!r} -- running it[/dim]")
+        self._speak_quietly("Running it now.")
+        return True
+
+    def _speak_quietly(self, line):
+        """Best-effort acknowledgement. The verdict is already decided."""
+        try:
+            self._speak(line)
+        except (TtsError, AudioError, RuntimeError):
+            pass
+
+    def _voice_confirm(self, plan, entry=None, reason=None):
         """Ask for confirmation by voice. Returns True to run, False to abort.
 
         Fails closed: any TTS/STT/timeout problem denies the action, so a broken
-        audio path can never escalate to "run it without asking".
+        audio path can never escalate to "run it without asking". The countdown
+        is the one deliberate exception, and only for actions that are
+        irreversible anyway -- see _voice_countdown.
         """
+        seconds = self._countdown_seconds(reason)
+        if seconds > 0:
+            return self._voice_countdown(plan, entry, reason, seconds)
+
         prompt = CONFIRM_PROMPT.format(
             command=self._speakable_plan(plan, entry),
             effect=self._effect_text(plan, entry),
@@ -296,18 +374,94 @@ class VoiceLoop:
         return ("one request per wake" if self.always_asleep
                 else "stays awake between requests")
 
-    def _listen(self):
+    # ---------- wake chime ----------
+
+    def _load_wake_chime(self):
+        """Decode voice_wake_chime to (mono float32 samples, rate), or None.
+
+        Any problem here is reported once and then treated as "no chime",
+        because the chime is acknowledgement, not a dependency.
+        """
+        raw = getattr(self.config, "voice_wake_chime", "") or ""
+        if not str(raw).strip():
+            return None
+        path = Path(str(raw).strip())
+        if not path.exists():
+            self.log(f"[dim]no wake chime at {path.name} -- continuing without one[/dim]")
+            return None
+
+        try:
+            import soundfile as sf
+            samples, rate = sf.read(str(path), dtype="float32", always_2d=False)
+        except Exception as e:
+            self.log(f"[yellow]wake chime unreadable ({path.name}: {e}) "
+                     f"-- continuing without it[/yellow]")
+            return None
+
+        data = np.asarray(samples, dtype=np.float32)
+        if data.ndim > 1:
+            data = data.mean(axis=1)
+        if data.size == 0:
+            self.log(f"[yellow]wake chime is empty ({path.name})[/yellow]")
+            return None
+
+        try:
+            gain = float(getattr(self.config, "voice_wake_chime_gain", 0.6))
+        except (TypeError, ValueError):
+            gain = 0.6
+        # Normalise to the configured peak so any drop-in file lands at the same
+        # level rather than at whatever its master happened to be. A silent file
+        # is treated as absent: playing it would only stall the listen window.
+        peak = float(np.max(np.abs(data))) if data.size else 0.0
+        if peak < 1e-4:
+            self.log(f"[yellow]wake chime is silent ({path.name}) -- skipping it[/yellow]")
+            return None
+        data = np.clip(data / peak * min(1.0, max(0.0, gain)), -1.0, 1.0)
+        return data, int(rate)
+
+    def _play_wake_chime(self):
+        """Acknowledge the wake word before the listen window opens.
+
+        Speaker.play blocks until the sound is finished, so the chime is over
+        before record_until_speech() opens -- the trailing sleep is only room
+        decay, so the VAD cannot mistake the tail for the user's request.
+        """
+        if not self._chime_tried:
+            self._chime_tried = True
+            self._chime = self._load_wake_chime()
+        if not self._chime:
+            return
+        samples, rate = self._chime
+        # Same reasoning as _speak: keep the wake loop from re-triggering on it.
+        self.mic.gate.mute(samples.size / float(rate) + 0.3)
+        try:
+            self.speaker.play(samples, rate)
+        except AudioError as e:
+            self.log(f"[yellow]wake chime playback failed: {e}[/yellow]")
+            return
+        time.sleep(0.15)
+
+    def _listen(self, max_record_s=None, no_speech_timeout_s=None):
+        """Record until speech, then until the utterance ends.
+
+        The two bounds default to config but can be overridden per call so a
+        countdown can borrow exactly as much microphone time as it has left.
+        """
         self._set_state(LISTENING)
         # The previous answer's caption is still readable at this point, but it
         # would sit over the screen while the user talks. Drop it on the way in
         # rather than on the way out, so it stays up for as long as possible.
         self._cap_clear()
         self.log("[bold cyan]listening...[/bold cyan]")
+        if max_record_s is None:
+            max_record_s = float(getattr(self.config, "voice_max_record_s", 30))
+        if no_speech_timeout_s is None:
+            no_speech_timeout_s = float(getattr(self.config, "voice_no_speech_timeout_s", 6))
         try:
             return self.mic.record_until_speech(
                 self.vad,
-                max_record_s=float(getattr(self.config, "voice_max_record_s", 30)),
-                no_speech_timeout_s=float(getattr(self.config, "voice_no_speech_timeout_s", 6)),
+                max_record_s=max_record_s,
+                no_speech_timeout_s=no_speech_timeout_s,
             )
         except AudioError as e:
             self.log(f"[red]mic error: {e}[/red]")
@@ -426,6 +580,7 @@ class VoiceLoop:
                 now = time.monotonic()
                 self._wake_from_sleep(now)
                 if self.wake.fired(frame, now):
+                    self._play_wake_chime()
                     self.handle_once()
                     cycles += 1
                     self._enter_sleep()

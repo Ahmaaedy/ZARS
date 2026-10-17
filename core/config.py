@@ -27,8 +27,17 @@ DEFAULTS = {
     "memory_recent": 20,
     # --- offline voice pipeline ---
     "voice_sample_rate": 16000,
+    # Device names, or a device index as a string, or null to let core/voice/
+    # devices.py choose. It filters candidates by whether they can run at the
+    # rate we need, then ranks by host API with MME last -- MME is the legacy
+    # waveOut API that returns "no driver installed" for virtual and USB
+    # endpoints. Pin a name here if the automatic pick is not the hardware you
+    # want; `python test_voice.py all` lists what PortAudio can see.
     "voice_mic_device": None,
     "voice_speaker_device": None,
+    # Comma-separated PortAudio host API names, most-preferred first. Empty
+    # uses the built-in order (DirectSound, WASAPI, WDM-KS, MME).
+    "voice_audio_host_api": "",
     # openWakeWord: the .onnx ships inside the openwakeword wheel
     "voice_wakeword_model": str(Path(__file__).resolve().parent.parent / "models" / "wakeword" / "hey_rhasspy_v0.1.onnx"),
     "voice_wakeword_threshold": 0.5,
@@ -79,6 +88,19 @@ DEFAULTS = {
     # max seconds to honour Retry-After on a 429 before failing over to the
     # local stack; 0 disables waiting entirely
     "groq_retry_after_max_s": 2.0,
+    # Reasoning-request shaping for Groq, kept off config.json's shared
+    # `temperature` so the local Ollama path is unaffected.
+    # Groq documents gpt-oss as best at 0.5-0.7 (default 0.6); sampling at 1.0
+    # makes malformed tool calls likelier.
+    "groq_temperature": 0.6,
+    # Groq's server-side default is 1024 tokens for reasoning AND the reply.
+    # gpt-oss spends most of that thinking, so the tool call gets truncated
+    # mid-JSON and Groq answers "Parsing failed ... could not be parsed".
+    "groq_max_completion_tokens": 2048,
+    # low/medium/high on gpt-oss. ZARS asks for one small action per turn, so
+    # deep reasoning is mostly wasted budget here; raise it to medium if you
+    # want the model to think harder before non-trivial PowerShell commands.
+    "groq_reasoning_effort": "low",
     # Gemini is the alternate reasoning provider (ZARS_MODE=gemini). STT still
     # goes to Groq whisper in that mode.
     "gemini_api_key": "",
@@ -86,6 +108,15 @@ DEFAULTS = {
     "gemini_timeout_seconds": 30.0,
     "gemini_retry_after_max_s": 2.0,
     "online_fallback_to_local": True,
+    # --- irreversible-action grace period ---
+    # Power actions and screen locks count down instead of asking y/N: the plan
+    # is shown, then it runs unless "no"/"stop" arrives in time. Silence means
+    # go, which is why COUNTDOWN_REASONS in core/safety.py limits this to
+    # actions that cannot be undone. 0 restores the blocking y/N prompt.
+    "confirm_countdown_seconds": 10.0,
+    # Typed input that cancels a countdown. The voice path reuses its own
+    # NO_WORDS set, which already covers stop/cancel/abort/wait.
+    "confirm_cancel_words": ["no", "n", "stop", "cancel", "nope", "nah", "abort"],
     # --- orb overlay speech caption (voice mode only) ---
     # A translucent bubble above the orb that writes what is being spoken.
     # caption_mode: typewriter reveals word by word in time with the audio;
@@ -95,6 +126,15 @@ DEFAULTS = {
     "voice_orb_caption_width": 360,
     "voice_orb_caption_max_lines": 4,
     "voice_orb_caption_fade_ms": 400,
+    # --- wake chime ---
+    # Played the moment the wake word fires, before the listen window opens, so
+    # you know it was heard. A bare filename is resolved against the project
+    # root. Empty string disables it; a missing or undecodable file is logged
+    # once and then ignored -- a chime is never allowed to stop voice mode.
+    "voice_wake_chime": "wakeup.mp3",
+    # Chimes are normalised to this peak on load, so any file you drop in
+    # plays at the same comfortable level regardless of how it was mastered.
+    "voice_wake_chime_gain": 0.6,
 }
 
 # keys sourced from .env; config.json can still override them
@@ -106,6 +146,9 @@ ENV_KEYS = {
     "GROQ_STT_LANGUAGE": "groq_stt_language",
     "GROQ_TIMEOUT_SECONDS": "groq_timeout_seconds",
     "GROQ_RETRY_AFTER_MAX_S": "groq_retry_after_max_s",
+    "GROQ_TEMPERATURE": "groq_temperature",
+    "GROQ_MAX_COMPLETION_TOKENS": "groq_max_completion_tokens",
+    "GROQ_REASONING_EFFORT": "groq_reasoning_effort",
     "ONLINE_FALLBACK_TO_LOCAL": "online_fallback_to_local",
     "GEMINI_API_KEY": "gemini_api_key",
     "GEMINI_LLM_MODEL": "gemini_llm_model",
@@ -127,14 +170,23 @@ ENV_KEYS = {
     "ZARS_VOICE_WAKE_COOLDOWN_S": "voice_wake_cooldown_s",
     "ZARS_VOICE_WAKE_REARM_RATIO": "voice_wake_rearm_ratio",
     "ZARS_VOICE_WAKE_MAX_LOCK_S": "voice_wake_max_lock_s",
+    "ZARS_VOICE_WAKE_CHIME": "voice_wake_chime",
+    "ZARS_VOICE_WAKE_CHIME_GAIN": "voice_wake_chime_gain",
     "ZARS_VOICE_NO_SPEECH_TIMEOUT_S": "voice_no_speech_timeout_s",
     "ZARS_VOICE_MAX_RECORD_S": "voice_max_record_s",
+    "ZARS_VOICE_MIC_DEVICE": "voice_mic_device",
+    "ZARS_VOICE_SPEAKER_DEVICE": "voice_speaker_device",
+    "ZARS_VOICE_AUDIO_HOST_API": "voice_audio_host_api",
 }
 
 # env values coerced to the types DEFAULTS expects
 ENV_CASTS = {
     "groq_timeout_seconds": float,
     "groq_retry_after_max_s": float,
+    "groq_temperature": float,
+    "groq_max_completion_tokens": int,
+    "confirm_countdown_seconds": float,
+    "voice_wake_chime_gain": float,
     "gemini_timeout_seconds": float,
     "gemini_retry_after_max_s": float,
     "online_fallback_to_local": lambda v: str(v).strip().lower() in ("1", "true", "yes", "on"),
@@ -218,6 +270,7 @@ class Config:
         "voice_whisper_model",
         "voice_kokoro_model",
         "voice_kokoro_voices",
+        "voice_wake_chime",
     )
 
     def _resolve_paths(self):

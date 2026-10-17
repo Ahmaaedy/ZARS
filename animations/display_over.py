@@ -53,8 +53,14 @@ timer = QTimer()
 timer.timeout.connect(refresh)
 timer.start(100)
 
-stream = sd.InputStream(channels=1, callback=audio)
-stream.start()
+try:
+    stream = sd.InputStream(channels=1, callback=audio)
+    stream.start()
+except Exception as e:
+    # Nothing above this point is worth crashing over: the overlay is decoration,
+    # and an unhandled PortAudioError here kills the window outright.
+    sys.stderr.write(f"display_over: cannot open the microphone ({e}); exiting\n")
+    sys.exit(1)
 
 lb.show()
 sys.exit(app.exec_())

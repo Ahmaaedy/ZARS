@@ -143,6 +143,7 @@ def run_voice(config, registry, agent, console):
     model, no mic, missing dependency) is reported and returns instead of
     crashing the app."""
     from core.voice.orchestrator import VoiceLoop
+    from core.voice.audio_io import AudioError
     from core.voice.orb_client import OrbClient
 
     # The orb overlay is a separate process: Qt needs the main thread for its
@@ -176,10 +177,34 @@ def run_voice(config, registry, agent, console):
     )
     if _is_online(config.zars_mode):
         console.print("[yellow]ONLINE: recorded audio and conversation text are sent to your cloud provider.[/yellow]")
+    # Show what the resolver will reach for. Device choice is automatic now, so
+    # without this a surprise (a USB mic that came and went) stays invisible.
+    try:
+        from core.voice import devices
+        top = devices.candidates("input", config.voice_sample_rate, 1, "int16",
+                                 config.voice_mic_device, limit=1)
+        if top:
+            console.print("[dim]mic: %d: %s [%s][/dim]" % (top[0][0], top[0][1], top[0][2]))
+        out = devices.candidates("output", 24000, 1, "float32",
+                                 config.voice_speaker_device, limit=1)
+        if out:
+            console.print("[dim]speaker: %d: %s [%s][/dim]" % (out[0][0], out[0][1], out[0][2]))
+    except Exception as e:
+        console.print(f"[dim]audio device probe failed: {e}[/dim]")
     try:
         loop.run()
     except KeyboardInterrupt:
         pass
+    except AudioError as e:
+        # The microphone and speaker open lazily, inside run(), so a device
+        # failure arrives here rather than in the guarded construction above.
+        orb.stop()
+        console.print(f"[bold red]voice mode unavailable:[/bold red] {e}")
+        console.print("[dim]set voice_mic_device / voice_speaker_device in "
+                      "config.json, then run `python test_voice.py all` to isolate "
+                      "the stage[/dim]")
+        loop.close()
+        return 1
     finally:
         loop.close()
         orb.stop()
