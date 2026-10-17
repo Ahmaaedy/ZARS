@@ -38,6 +38,11 @@ DEFAULTS = {
     # Comma-separated PortAudio host API names, most-preferred first. Empty
     # uses the built-in order (DirectSound, WASAPI, WDM-KS, MME).
     "voice_audio_host_api": "",
+    # Global hotkey that wakes her without saying the wake word, e.g. "alt+`".
+    # A modifier is required, or the key would be swallowed during normal
+    # typing. Empty disables it. If Windows or another app already owns the
+    # combination, voice mode says so and carries on using the wake word.
+    "voice_wake_hotkey": "alt+`",
     # openWakeWord: the .onnx ships inside the openwakeword wheel
     "voice_wakeword_model": str(Path(__file__).resolve().parent.parent / "models" / "wakeword" / "hey_rhasspy_v0.1.onnx"),
     "voice_wakeword_threshold": 0.5,
@@ -177,6 +182,7 @@ ENV_KEYS = {
     "ZARS_VOICE_MIC_DEVICE": "voice_mic_device",
     "ZARS_VOICE_SPEAKER_DEVICE": "voice_speaker_device",
     "ZARS_VOICE_AUDIO_HOST_API": "voice_audio_host_api",
+    "ZARS_VOICE_WAKE_HOTKEY": "voice_wake_hotkey",
 }
 
 # env values coerced to the types DEFAULTS expects

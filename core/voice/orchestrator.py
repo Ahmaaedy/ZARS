@@ -24,6 +24,7 @@ import numpy as np
 from ..providers.base import ProviderError
 from . import devices
 from .audio_io import AudioError, MicSource, Speaker
+from .hotkey import GlobalHotkey, HotkeyError
 from .stt import SttEngine, SttError
 from .tts import KokoroTts, TtsError
 from .vad import SileroVad, VadError
@@ -68,6 +69,19 @@ class VoiceLoop:
             device=getattr(config, "voice_mic_device", None),
         )
         self.speaker = Speaker(device=getattr(config, "voice_speaker_device", None))
+        # Global hotkey to wake without saying the wake word. Optional: a bad
+        # spec or a key another app already owns must not stop voice mode.
+        self.hotkey = None
+        self.hotkey_label = None
+        self.hotkey_error = None
+        hotkey_spec = getattr(config, "voice_wake_hotkey", "")
+        if str(hotkey_spec or "").strip():
+            try:
+                self.hotkey = GlobalHotkey(hotkey_spec)
+                self.hotkey_label = self.hotkey.label
+            except HotkeyError as e:
+                self.hotkey_error = str(e)
+                self.hotkey = None
         # Sleep policy. The wake word is the only way in; `always_asleep` just
         # decides whether she drops back into SLEEPING after each request or
         # stays hot, which is the old behaviour.
@@ -370,6 +384,23 @@ class VoiceLoop:
             self._set_state(IDLE)
             self.log("[dim]awake[/dim]")
 
+    # ---------- wake hotkey ----------
+
+    def _start_hotkey(self):
+        if self.hotkey is None:
+            return
+        try:
+            self.hotkey.start()
+            self.log(f"[dim]hotkey {self.hotkey.label} registered[/dim]")
+        except HotkeyError as e:
+            self.hotkey_error = str(e)
+            self.hotkey = None
+            self.log(f"[yellow]hotkey unavailable: {e}[/yellow]")
+
+    def _stop_hotkey(self):
+        if self.hotkey is not None:
+            self.hotkey.stop()
+
     def _sleep_policy(self):
         return ("one request per wake" if self.always_asleep
                 else "stays awake between requests")
@@ -574,12 +605,22 @@ class VoiceLoop:
             f"(threshold {self.wake.threshold:.2f}, {self._sleep_policy()}). "
             f"Ctrl+C to quit."
         )
+        if self.hotkey_label:
+            self.log(f"[bold cyan]or press[/bold cyan] [bold]{self.hotkey_label}[/bold]")
+        elif self.hotkey_error:
+            self.log(f"[yellow]hotkey unavailable: {self.hotkey_error}[/yellow]")
+        self._start_hotkey()
+
         cycles = 0
         try:
             for frame in self.mic.stream():
                 now = time.monotonic()
                 self._wake_from_sleep(now)
-                if self.wake.fired(frame, now):
+                spoke = self.wake.fired(frame, now)
+                hot = False
+                if self.hotkey is not None and self.hotkey.take():
+                    hot = self.wake.allow_external_wake(now)
+                if spoke or hot:
                     self._play_wake_chime()
                     self.handle_once()
                     cycles += 1
@@ -589,11 +630,14 @@ class VoiceLoop:
         except KeyboardInterrupt:
             self.log("\n[dim]voice mode stopped[/dim]")
         finally:
+            self._stop_hotkey()
             self._restore_confirm_hook()
             self.mic.close()
             Speaker.stop()
 
     def close(self):
+        self._stop_hotkey()
         self._restore_confirm_hook()
         self.mic.close()
+        self.speaker.close()
         Speaker.stop()

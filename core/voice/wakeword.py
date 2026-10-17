@@ -91,6 +91,23 @@ class WakeWordDetector:
         """True while the detector is asleep between requests."""
         return time.monotonic() < self._suspended_until
 
+    def allow_external_wake(self, now):
+        """Gate for a wake that did not come from audio, i.e. the hotkey.
+
+        Same rules as a spoken wake word: nothing starts a request while the
+        detector is suspended or inside the cooldown. Recording the fire means a
+        wake word spoken immediately afterwards cannot open a second listen
+        window.
+        """
+        if now < self._suspended_until:
+            return False
+        if now - self._last_fire < self.cooldown_s:
+            return False
+        self._last_fire = now
+        self._locked = True
+        self._locked_at = now
+        return True
+
     def suspend(self, seconds):
         """Sleep the detector for a window, ignoring everything until it ends.
 
