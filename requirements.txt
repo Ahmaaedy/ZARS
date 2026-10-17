@@ -26,6 +26,8 @@ pywin32                 # win32com: skills/file_find + SAPI test helpers
 pycaw                   # Core Audio volume for skills/display_audio
 comtypes                # pycaw COM backend for skills/display_audio
 telethon                # notify_send
+playwright              # play_song: reads track ids off Spotify's search page.
+                        # Needs a browser once:  python -m playwright install chromium
 # screenshot_ocr OCR backend (WinRT bindings, one pip pkg per namespace):
 # winrt-Windows.Media.Ocr winrt-Windows.Globalization winrt-Windows.Graphics.Imaging winrt-Windows.Storage
 

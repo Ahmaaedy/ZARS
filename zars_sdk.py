@@ -3,7 +3,11 @@ import json
 import sys
 from pathlib import Path
 
-_TYPE_MAP = {"string": str, "number": float, "integer": int}
+def _boolean(value):
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+_TYPE_MAP = {"string": str, "number": float, "integer": int, "boolean": _boolean}
 
 
 def manifest_for(script_file):
@@ -17,7 +21,17 @@ def build_parser(manifest):
         name = param["name"]
         ptype = param.get("type", "string")
         if ptype == "boolean":
-            ap.add_argument(f"--{name}", action="store_true", help=param.get("desc", ""))
+            # nargs="?" + const so all three call styles work: a bare flag
+            # (`--search`), an explicit value (`--search True` as the executor
+            # passes it), and `--search False` to turn it off.
+            ap.add_argument(
+                f"--{name}",
+                nargs="?",
+                const=True,
+                type=_TYPE_MAP["boolean"],
+                default=bool(param.get("default", False)),
+                help=param.get("desc", ""),
+            )
         else:
             ap.add_argument(
                 f"--{name}",

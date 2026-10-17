@@ -23,9 +23,18 @@ BLOCKLIST = [
 
 _COMPILED = [(re.compile(p, re.IGNORECASE), reason) for p, reason in BLOCKLIST]
 
-# Power and mass app-closing are the only two things that stop for a y/n. They
-# are reachable through a skill, a registered shell command, or a raw command
-# the model invents, so both the entry id and the rendered command are checked.
+# Confirm reasons that get a grace period instead of a blocking y/N prompt:
+# silence means go. Only safe where the action is irreversible anyway, so a
+# mis-heard word costs a reboot rather than lost work. Matched against the
+# reason strings CONFIRM_LIST and CONFIRM_ENTRY_IDS produce, which is why the
+# wording there matters.
+COUNTDOWN_REASONS = {"power action", "locks the screen"}
+
+# Power, mass app-closing, and slow or outward-facing lookups are the things that
+# stop for a y/n. They are reachable through a skill, a registered shell command,
+# or a raw command the model invents, so both the entry id and the rendered
+# command are checked. A skill that needs its own mid-run confirmation asks for
+# one by putting its flag in the plan, the way play_song does with --search.
 CONFIRM_LIST = [
     (r"\bshutdown\b", "power action"),
     (r"\brestart-computer\b", "power action"),
@@ -33,6 +42,7 @@ CONFIRM_LIST = [
     (r"\brundll32\b[^\n]*\blockworkstation\b", "locks the screen"),
     (r"\brundll32\b[^\n]*\bpowrprof\b", "power action"),
     (r"\bsetsuspendstate\b", "power action"),
+    (r"--search\b", "opens a browser to look up an unknown song"),
 ]
 
 CONFIRM_ENTRY_IDS = {
