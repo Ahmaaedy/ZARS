@@ -1,4 +1,5 @@
 import json
+import threading
 
 from rich.panel import Panel
 
@@ -9,7 +10,7 @@ from .longterm_memory import LongTermMemory
 from .memory import ConversationMemory
 from .registry import RegistryError, render_template
 from .router import Router
-from .safety import check_blocked, check_confirm
+from .safety import COUNTDOWN_REASONS, check_blocked, check_confirm
 from .session import Session
 
 
@@ -129,17 +130,62 @@ class Agent:
 
     # ---------- safety ----------
 
+    def _cancel_words(self):
+        return {
+            str(w).strip().lower()
+            for w in (getattr(self.config, "confirm_cancel_words", None) or [])
+            if str(w).strip()
+        }
+
+    def _countdown_confirm(self, plan, reason, seconds):
+        """Warn, then run unless the user objects in time.
+
+        Silence means go. That is the inverse of the y/N prompt below and is
+        only safe because COUNTDOWN_REASONS restricts this to actions that
+        cannot be undone anyway.
+        """
+        words = sorted(self._cancel_words())
+        hint = " or ".join(f'"{w}"' for w in words) or '"no"'
+        self.console.print(
+            f"[bold yellow]{reason} -- running in {seconds:.0f}s. "
+            f"Type {hint} to cancel.[/bold yellow]"
+        )
+
+        finished = threading.Event()
+
+        def tick():
+            left = seconds
+            while not finished.wait(1.0):
+                left -= 1
+                if left <= 0:
+                    return
+                self.console.print(f"  [dim]{left:.0f}s[/dim]")
+
+        ticker = threading.Thread(target=tick, daemon=True)
+        ticker.start()
+        try:
+            got, line = interactive.read_line_until("", seconds)
+        finally:
+            finished.set()
+            ticker.join(timeout=1.5)
+
+        if got and str(line or "").strip().lower() in self._cancel_words():
+            self.console.print("[green]cancelled[/green]")
+            self._confirm_rejections += 1
+            return False
+        return True
+
     def _confirm(self, plan, entry=None, reason=None):
         if self.no_confirm:
             return True
         if self._confirm_rejections >= 2:
             self.console.print("[bold red]auto-denied:[/bold red] too many rejections this session")
             return False
-        # Voice mode: speak the confirmation and wait for a spoken yes/no.
-        # The hook owns the interaction, so no console prompt is shown.
+        # Voice mode: speak the warning and listen. The hook owns the whole
+        # interaction, so no console prompt is shown.
         if self.confirm_hook is not None:
             try:
-                ok = bool(self.confirm_hook(plan, entry))
+                ok = bool(self.confirm_hook(plan, entry, reason))
             except Exception as e:
                 self.console.print(f"[yellow]voice confirmation failed: {e}[/yellow]")
                 ok = False
@@ -148,6 +194,14 @@ class Agent:
             return ok
         title = f"confirm: {reason}" if reason else "confirm"
         self.console.print(Panel(plan, title=title, border_style="yellow"))
+
+        try:
+            countdown = float(getattr(self.config, "confirm_countdown_seconds", 0) or 0)
+        except (TypeError, ValueError):
+            countdown = 0.0
+        if countdown > 0 and reason in COUNTDOWN_REASONS:
+            return self._countdown_confirm(plan, reason, countdown)
+
         try:
             answer = interactive.ask("run this? [y/N]", default="n")
         except (KeyboardInterrupt, EOFError):
