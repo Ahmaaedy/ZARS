@@ -4,7 +4,7 @@ Both reuse the existing core/llm.py LLM object for its system prompt and its
 response parser, so the prompt text and the tool-pick validation stay in exactly
 one place regardless of mode. Only the transport differs.
 """
-from .base import ProviderError, LLMProvider
+from .base import LLMProvider, MalformedOutputError, ProviderError
 
 
 class _SharedLLM(LLMProvider):
@@ -100,15 +100,22 @@ class GroqLLM(_SharedLLM):
     def _stream(self, messages):
         """Stream once. Returns (content_text, tool_args_json, tool_name).
 
-        Tries native tool calling first. If the model produces a tool call the
-        provider cannot validate, falls back ONCE to plain JSON mode. Each path
+        Tries native tool calling first. If the model produces output the
+        provider cannot parse, falls back ONCE to plain JSON mode, which is far
+        more constrained and so much less likely to fail the same way. Each path
         gets one bounded Retry-After wait; auth/rate-limit/offline errors that
         outlast it propagate so the factory can decide on local fallback.
         """
         try:
             return self._with_retry(lambda: self._stream_tools(messages))
         except ProviderError as e:
-            if "tool call" not in str(e).lower():
+            # Key off the error class, not the message. Groq words this same
+            # problem several ways -- "Parsing failed...", "Tool choice is
+            # none...", "Tool call validation failed" -- and the parse-failure
+            # wording contains neither "tool call" nor "validation failed", so
+            # the old substring test let the one recovery path below go unused.
+            # The substring check stays as a net for wording we have not seen.
+            if not isinstance(e, MalformedOutputError) and "tool call" not in str(e).lower():
                 raise
             return self._with_retry(lambda: self._stream_json(messages))
 
@@ -120,8 +127,8 @@ class GroqLLM(_SharedLLM):
         kwargs = {
             "model": self.model,
             "messages": messages,
-            "temperature": self._config_temperature(),
             "response_format": {"type": "json_object"},
+            **self._sampling(),
         }
         try:
             for chunk in client.chat.completions.create(stream=True, **kwargs):
@@ -142,10 +149,10 @@ class GroqLLM(_SharedLLM):
         kwargs = {
             "model": self.model,
             "messages": messages,
-            "temperature": self._config_temperature(),
             "tools": self._tools(),
             "tool_choice": "auto",
             "parallel_tool_calls": False,
+            **self._sampling(),
         }
         try:
             for chunk in client.chat.completions.create(stream=True, **kwargs):
@@ -182,7 +189,48 @@ class GroqLLM(_SharedLLM):
             yield args_json
 
     def _config_temperature(self):
+        """Groq's own sampling temperature, not the shared config.json one.
+
+        config.json ships temperature 1 because that suits the local model.
+        Groq documents gpt-oss as best at 0.5-0.7 (server default 0.6), and
+        sampling at 1.0 makes malformed tool-call syntax more likely, so
+        groq_temperature wins whenever it is set.
+        """
+        override = getattr(self._llm.config, "groq_temperature", None)
+        if override is not None:
+            try:
+                return float(override)
+            except (TypeError, ValueError):
+                pass
         return getattr(self._llm.config, "temperature", 0.1)
+
+    def _sampling(self):
+        """Temperature and token/effort ceilings shared by both stream paths.
+
+        max_completion_tokens matters more than it looks: Groq's server default
+        is 1024 for the whole response, and a reasoning model spends most of
+        that before it starts the tool call. Too small a ceiling truncates the
+        arguments mid-JSON, which is what produces "Parsing failed".
+
+        reasoning_effort is sent only for gpt-oss. Groq supports it on
+        gpt-oss-20b/120b specifically, and other models reject unknown request
+        parameters with a 400.
+        """
+        out = {"temperature": self._config_temperature()}
+
+        limit = getattr(self._llm.config, "groq_max_completion_tokens", None)
+        try:
+            limit = int(limit) if limit is not None else 0
+        except (TypeError, ValueError):
+            limit = 0
+        if limit > 0:
+            out["max_completion_tokens"] = limit
+
+        effort = str(getattr(self._llm.config, "groq_reasoning_effort", "") or "").strip().lower()
+        if effort and "gpt-oss" in self.model.lower():
+            out["reasoning_effort"] = effort
+
+        return out
 
     def pick(self, messages):
         """Stream, normalise to the Zars pick shape, validate with the shared

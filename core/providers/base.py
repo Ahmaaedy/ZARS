@@ -36,6 +36,16 @@ class OfflineError(ProviderError):
     """No network / DNS / connection refused."""
 
 
+class MalformedOutputError(ProviderError):
+    """The model emitted output the provider could not parse.
+
+    Deliberately not a ServerError: the service is healthy and the request was
+    well-formed, so the same prompt usually succeeds on a retry or through the
+    provider's other decoding path. Callers should exhaust those cheap options
+    before failing over to another provider.
+    """
+
+
 def call_with_retry(fn, max_wait, sleep=time.sleep):
     """Run fn(); on a 429 whose Retry-After fits the budget, wait once and
     retry exactly once.
