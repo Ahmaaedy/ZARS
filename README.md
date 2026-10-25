@@ -1,4 +1,4 @@
-# ZARS — on-device terminal AI assistant
+# ZARS — on-device terminal AI assistant.
 
 A terminal-based assistant for Windows that runs commands and Python "skills",
 driven by a small local model (Ollama) with a JSON command registry. Common
