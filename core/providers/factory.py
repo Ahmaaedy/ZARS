@@ -7,6 +7,8 @@ Fallback: when online fails and ONLINE_FALLBACK_TO_LOCAL is true, the local
 provider is built lazily at that moment -- so a healthy online session never
 pays the RAM cost of loading faster-whisper / Ollama.
 """
+from rich.markup import escape
+
 from .base import ProviderError
 
 VALID_MODES = ("offline", "groq", "gemini")
@@ -179,6 +181,7 @@ class ChainedLLM:
     def __init__(self, chain, log=None):
         self._chain = list(chain)
         self.name = " -> ".join(getattr(p, "name", "?") for p in self._chain)
+        self._log = log or (lambda m: None)
 
     def system_prompt(self):
         return self._chain[0].system_prompt()
@@ -192,8 +195,10 @@ class ChainedLLM:
                 last = e
                 if i < len(self._chain) - 1:
                     nxt = getattr(self._chain[i + 1], "name", "next")
-                    print(f"[zars] {getattr(provider, 'name', 'provider')} failed "
-                          f"({e}); trying {nxt}")
+                    # escape(): the log is a console, so "[zars]" would be read
+                    # as a markup tag and dropped.
+                    self._log(escape(f"[zars] {getattr(provider, 'name', 'provider')} "
+                                     f"failed ({e}); trying {nxt}"))
         raise last
 
     def chat(self, messages, stream=True):
@@ -206,8 +211,8 @@ class ChainedLLM:
                 last = e
                 if i < len(self._chain) - 1:
                     nxt = getattr(self._chain[i + 1], "name", "next")
-                    print(f"[zars] {getattr(provider, 'name', 'provider')} failed "
-                          f"({e}); trying {nxt}")
+                    self._log(escape(f"[zars] {getattr(provider, 'name', 'provider')} "
+                                     f"failed ({e}); trying {nxt}"))
         raise last
 
 

@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 notes/
 memory/
+logs/
 config/telegram.json
 macros.json
 

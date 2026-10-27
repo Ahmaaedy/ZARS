@@ -14,6 +14,7 @@ from core.macros import MacroManager, print_macros, handle_macro_add
 from core.ollama_serve import ensure_serving
 from core.registry import load_registry
 from core.providers.factory import build_llm
+from core.session_log import Tee
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -223,8 +224,12 @@ def main():
     args = ap.parse_args()
 
     config = Config(model=args.model, host=args.host)
-    console = Console(legacy_windows=False)
+    # The console writes through a tee, so everything the terminal shows is
+    # mirrored into a plain-text log of this session.
+    log = Tee()
+    console = Console(legacy_windows=False, file=log)
     interactive.init(console)
+    console.print(f"[dim]session log: {log.path}[/dim]")
 
     registry = load_registry()
     for e in registry.errors:
@@ -256,6 +261,7 @@ def main():
 
     if args.one_shot:
         request = args.one_shot.strip()
+        log.note(f"> {request}")
         if request.startswith("/"):
             handle_slash(console, agent, request)
         else:
@@ -290,6 +296,9 @@ def main():
         text = payload.strip()
         if not text:
             continue
+        # The terminal echoes what the user typed; the log does not, so it is
+        # written here to keep the conversation complete.
+        log.note(f"> {text}")
         if text.startswith("/"):
             try:
                 handle_slash(console, agent, text)

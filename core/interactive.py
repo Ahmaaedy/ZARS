@@ -161,7 +161,11 @@ def ask(prompt, default=None, choices=None):
         if choices:
             if line.lower() in choices:
                 return line.lower()
-            print(f"please choose one of: {', '.join(choices)}")
+            msg = f"please choose one of: {', '.join(choices)}"
+            if _console is not None:
+                _console.print(msg)
+            else:
+                print(msg)
             continue
         return line
 
