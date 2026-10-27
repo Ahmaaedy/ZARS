@@ -77,7 +77,7 @@ class LLM:
             '{"thought": "search for cat videos first", "tool": "web_search", "args": {"query": "cat videos"}, "command": "", "response": ""}\n'
             '[tool result with a YouTube link]\n'
             '{"thought": "open the video link", "tool": "open_url", "args": {"url": "https://youtube.com/watch?v=..."}, "command": "", "response": ""}\n\n'
-            "Respond with JSON only."
+            "Respond with JSON only and avoid using symbols like asteriks, output shld be conversation and direct tts friendly "
         )
 
     def _registry_lines_compact(self):
